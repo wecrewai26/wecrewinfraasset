@@ -1,0 +1,82 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: infraasset-pg-data
+  labels:
+    app.kubernetes.io/name: infraasset
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.postgresql.storage }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: infraasset-postgres
+  labels:
+    app: infraasset-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: infraasset-postgres
+  template:
+    metadata:
+      labels:
+        app: infraasset-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.postgresql.image }}
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: infraasset-db
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: infraasset-db
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: infraasset-db
+                  key: database
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+              subPath: pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgresql.username | quote }}]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: infraasset-pg-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: infraasset-postgres
+spec:
+  selector:
+    app: infraasset-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+{{- end }}

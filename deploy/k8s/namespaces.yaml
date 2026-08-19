@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: infraasset
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: infraasset-monitoring
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: infraasset-data

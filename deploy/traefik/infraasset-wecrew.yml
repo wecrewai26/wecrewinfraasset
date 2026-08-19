@@ -1,0 +1,33 @@
+# infraasset.wecrew.in — Traefik terminates TLS, forwards HTTP to kind ingress-nginx :8080
+http:
+  routers:
+    infraasset-wecrew-web:
+      entryPoints:
+        - websecure
+      rule: Host(`infraasset.wecrew.in`)
+      tls:
+        certResolver: letsencrypt
+      service: infraasset-wecrew-kind-http
+      priority: 120
+
+    infraasset-wecrew-web-http:
+      entryPoints:
+        - web
+      rule: Host(`infraasset.wecrew.in`)
+      priority: 120
+      middlewares:
+        - infraasset-wecrew-https-redirect
+      service: infraasset-wecrew-kind-http
+
+  middlewares:
+    infraasset-wecrew-https-redirect:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
+  services:
+    infraasset-wecrew-kind-http:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8080"
+        passHostHeader: true

@@ -1,0 +1,30 @@
+replicaCount: 1
+image:
+  api: infraasset-api:0.1.0
+  web: infraasset-web:0.1.0
+  pullPolicy: IfNotPresent
+env: development
+webOrigin: https://infraasset.wecrew.in
+demoSeed: true
+postgresql:
+  enabled: true
+  image: postgres:16-alpine
+  username: infraasset
+  password: infraasset
+  database: infraasset
+  storage: 5Gi
+ingress:
+  enabled: true
+  className: nginx
+  host: infraasset.wecrew.in
+  tls: false
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-body-size: "8m"
+resources:
+  requests:
+    cpu: 20m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
