@@ -1,3 +1,12 @@
 "use client";
-import { VmPage } from "@/components/assets/module-pages";
-export default VmPage;
+import { AssetTable } from "@/components/assets/AssetTable";
+export default function Page() {
+  return (
+    <AssetTable
+      eyebrow="Compute"
+      title="VMware"
+      description="vSphere guests and hypervisors registered in the CMDB."
+      assetType="vm"
+    />
+  );
+}

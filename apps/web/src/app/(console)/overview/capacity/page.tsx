@@ -1,3 +1,3 @@
 "use client";
-import { CapacityPage } from "@/components/assets/module-pages";
-export default CapacityPage;
+import { CapacityDashboard } from "@/components/dash/OverviewBoards";
+export default CapacityDashboard;

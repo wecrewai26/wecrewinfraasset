@@ -1,3 +1,5 @@
 "use client";
-import { RelPage } from "@/components/assets/module-pages";
-export default RelPage;
+
+import { CmdbBoard } from "@/components/dash/DomainBoards";
+
+export default CmdbBoard;

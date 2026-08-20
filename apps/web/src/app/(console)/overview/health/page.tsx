@@ -1,3 +1,3 @@
 "use client";
-import { AlertsPage } from "@/components/assets/module-pages";
-export default AlertsPage;
+import { HealthDashboard } from "@/components/dash/OverviewBoards";
+export default HealthDashboard;

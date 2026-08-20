@@ -26,6 +26,21 @@ def _dump(row) -> dict:
     return {c.name: getattr(row, c.name) for c in row.__table__.columns}
 
 
+def _asset_ref(db: Session, asset_id: str | None) -> dict | None:
+    if not asset_id:
+        return None
+    asset = db.query(Asset).filter(Asset.id == asset_id).one_or_none()
+    if asset is None:
+        return None
+    return {"id": asset.id, "name": asset.name, "asset_type": asset.asset_type, "health": asset.health}
+
+
+def _with_asset(db: Session, row) -> dict:
+    payload = _dump(row)
+    payload["asset"] = _asset_ref(db, getattr(row, "asset_id", None))
+    return payload
+
+
 @dc_router.get("/data-centers")
 def data_centers(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
     sites = db.query(Site).filter(Site.tenant_id == principal.tenant_id).all()
@@ -266,7 +281,30 @@ def root_cause(
 @ops_router.get("/alerts")
 def alerts(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
     rows = db.query(Alert).filter(Alert.tenant_id == principal.tenant_id).order_by(Alert.fired_at.desc()).all()
-    return {"items": [_dump(r) for r in rows]}
+    return {"items": [_with_asset(db, r) for r in rows]}
+
+
+@ops_router.get("/alerts/{alert_id}")
+def alert_detail(
+    alert_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_user)],
+):
+    row = db.query(Alert).filter(Alert.id == alert_id, Alert.tenant_id == principal.tenant_id).one_or_none()
+    if row is None:
+        raise HTTPException(404, "Alert not found")
+    body = _with_asset(db, row)
+    siblings = []
+    if row.asset_id:
+        siblings = (
+            db.query(Alert)
+            .filter(Alert.tenant_id == principal.tenant_id, Alert.asset_id == row.asset_id, Alert.id != row.id)
+            .order_by(Alert.fired_at.desc())
+            .limit(8)
+            .all()
+        )
+    body["related_alerts"] = [_with_asset(db, a) for a in siblings]
+    return body
 
 
 @ops_router.get("/incidents")
@@ -275,16 +313,71 @@ def incidents(db: Annotated[Session, Depends(get_db)], principal: Annotated[Prin
     return {"items": [_dump(r) for r in rows]}
 
 
+@ops_router.get("/incidents/{incident_id}")
+def incident_detail(
+    incident_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_user)],
+):
+    row = db.query(Incident).filter(Incident.id == incident_id, Incident.tenant_id == principal.tenant_id).one_or_none()
+    if row is None:
+        raise HTTPException(404, "Incident not found")
+    assets = []
+    if row.business_service:
+        assets = (
+            db.query(Asset)
+            .filter(Asset.tenant_id == principal.tenant_id, Asset.business_service == row.business_service)
+            .limit(20)
+            .all()
+        )
+    open_alerts = (
+        db.query(Alert)
+        .filter(Alert.tenant_id == principal.tenant_id, Alert.status.in_(["open", "firing"]))
+        .order_by(Alert.fired_at.desc())
+        .limit(12)
+        .all()
+    )
+    return {
+        **_dump(row),
+        "assets": [_asset_ref(db, a.id) for a in assets],
+        "alerts": [_with_asset(db, a) for a in open_alerts],
+    }
+
+
 @ops_router.get("/changes")
 def changes(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
     rows = db.query(Change).filter(Change.tenant_id == principal.tenant_id).all()
-    return {"items": [_dump(r) for r in rows]}
+    return {"items": [_with_asset(db, r) for r in rows]}
+
+
+@ops_router.get("/changes/{change_id}")
+def change_detail(
+    change_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_user)],
+):
+    row = db.query(Change).filter(Change.id == change_id, Change.tenant_id == principal.tenant_id).one_or_none()
+    if row is None:
+        raise HTTPException(404, "Change not found")
+    return _with_asset(db, row)
 
 
 @ops_router.get("/maintenance")
 def maintenance(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
     rows = db.query(Maintenance).filter(Maintenance.tenant_id == principal.tenant_id).all()
-    return {"items": [_dump(r) for r in rows]}
+    return {"items": [_with_asset(db, r) for r in rows]}
+
+
+@ops_router.get("/maintenance/{maint_id}")
+def maintenance_detail(
+    maint_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_user)],
+):
+    row = db.query(Maintenance).filter(Maintenance.id == maint_id, Maintenance.tenant_id == principal.tenant_id).one_or_none()
+    if row is None:
+        raise HTTPException(404, "Maintenance not found")
+    return _with_asset(db, row)
 
 
 @net_router.get("/subnets")

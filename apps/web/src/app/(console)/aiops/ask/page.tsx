@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { PageHeader, Panel, StatusChip } from "@/components/ui/dashboard";
 
 type AskResponse = {
   question: string;
@@ -26,38 +27,64 @@ export default function AskPage() {
   const [question, setQuestion] = useState(EXAMPLES[0]);
   const [result, setResult] = useState<AskResponse | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function run(q = question) {
     setBusy(true);
+    setError(null);
     try {
       setResult(await api<AskResponse>("/api/v1/ai/ask", { method: "POST", body: JSON.stringify({ question: q }) }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="max-w-4xl space-y-4">
-      <h1 className="text-2xl font-semibold">Ask InfraAsset</h1>
-      <p className="text-sm text-muted">Every answer cites inventory, metrics or CMDB evidence. Unsupported guesses are not returned.</p>
-      <div className="flex flex-wrap gap-2">
+    <div className="max-w-4xl">
+      <PageHeader
+        eyebrow="AI operations"
+        title="Ask InfraAsset"
+        description="Every answer cites inventory, metrics or CMDB evidence. Unsupported guesses are not returned."
+      />
+      <div className="mb-4 flex flex-wrap gap-2">
         {EXAMPLES.map((e) => (
-          <button key={e} className="text-xs border border-line rounded px-2 py-1 hover:border-coral" onClick={() => { setQuestion(e); run(e); }}>
+          <button
+            key={e}
+            className="rounded-full border border-line bg-panel px-3 py-1 text-xs hover:border-coral"
+            onClick={() => {
+              setQuestion(e);
+              void run(e);
+            }}
+          >
             {e}
           </button>
         ))}
       </div>
-      <textarea className="w-full bg-panel border border-line rounded p-3 h-24" value={question} onChange={(e) => setQuestion(e.target.value)} />
-      <button className="bg-coral text-white px-4 py-2 rounded" disabled={busy} onClick={() => run()}>
+      <textarea
+        className="mb-3 h-24 w-full rounded-2xl border border-line bg-panel p-3 text-sm outline-none focus:border-coral"
+        value={question}
+        onChange={(e) => setQuestion(e.target.value)}
+      />
+      <button className="mb-5 h-10 rounded-md bg-coral px-4 text-sm font-medium text-white disabled:opacity-60" disabled={busy} onClick={() => void run()}>
         {busy ? "Correlating…" : "Ask"}
       </button>
-      {result && (
-        <div className="border border-line bg-panel p-4 rounded space-y-3">
-          <div className="text-xs uppercase tracking-widest text-muted">{result.kind} · {result.confidence}</div>
-          <p className="text-lg">{result.answer}</p>
-          <pre className="text-xs overflow-auto bg-ink p-3 rounded max-h-80">{JSON.stringify(result.evidence, null, 2)}</pre>
-        </div>
-      )}
+      {error ? <p className="mb-3 text-sm text-crit">{error}</p> : null}
+      {result ? (
+        <Panel title={result.kind.replaceAll("_", " ")} subtitle={`Confidence ${result.confidence}`}>
+          <div className="space-y-3 p-4">
+            <div className="flex items-center gap-2">
+              <StatusChip value={result.kind} />
+              <StatusChip value={result.confidence} />
+            </div>
+            <p className="text-lg leading-relaxed">{result.answer}</p>
+            <pre className="max-h-80 overflow-auto rounded-xl bg-[#f7f4ee] p-3 font-mono text-[11px] text-muted">
+              {JSON.stringify(result.evidence, null, 2)}
+            </pre>
+          </div>
+        </Panel>
+      ) : null}
     </div>
   );
 }

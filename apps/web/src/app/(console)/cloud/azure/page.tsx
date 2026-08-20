@@ -1,3 +1,7 @@
 "use client";
-import { CloudPage } from "@/components/assets/module-pages";
-export default CloudPage;
+
+import { CloudBoard } from "@/components/dash/DomainBoards";
+
+export default function Page() {
+  return <CloudBoard provider="azure" />;
+}

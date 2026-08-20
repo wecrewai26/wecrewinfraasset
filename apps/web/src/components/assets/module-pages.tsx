@@ -1,89 +1,139 @@
 "use client";
 
 import { AssetTable } from "@/components/assets/AssetTable";
-import { JsonTable } from "@/components/assets/JsonTable";
+import {
+  AddressesBoard,
+  AlertsBoard,
+  AuditBoard,
+  ChangesBoard,
+  CloudBoard,
+  CoolingBoard,
+  ContractsBoard,
+  DnsBoard,
+  GpuCapacityBoard,
+  IncidentsBoard,
+  IpamBoard,
+  LicensesBoard,
+  MaintenanceBoard,
+  NetworksBoard,
+  PowerBoard,
+  PredictionsBoard,
+  RelationshipsBoard,
+  StorageBoard,
+  UsersBoard,
+  VendorsBoard,
+  VlansBoard,
+  WarrantyBoard,
+} from "@/components/dash/DomainBoards";
 
 export function ServersPage() {
-  return <AssetTable title="Physical servers" assetType="server" />;
+  return (
+    <AssetTable
+      eyebrow="Compute"
+      title="Physical servers"
+      description="Bare-metal nodes in the CMDB — GPU and CPU halls."
+      assetType="server"
+    />
+  );
 }
 export function CpuPage() {
-  return <AssetTable title="CPU infrastructure" assetType="server" />;
+  return (
+    <AssetTable
+      eyebrow="Compute"
+      title="CPU infrastructure"
+      description="General compute servers, not the H100 tray."
+      assetType="server"
+    />
+  );
 }
 export function GpuInfraPage() {
-  return <AssetTable title="GPU infrastructure" assetType="gpu" />;
+  return (
+    <AssetTable
+      eyebrow="Compute"
+      title="GPU infrastructure"
+      description="Accelerators as first-class assets."
+      assetType="gpu"
+    />
+  );
 }
 export function VmPage() {
-  return <AssetTable title="Virtual machines" assetType="vm" />;
+  return (
+    <AssetTable eyebrow="Compute" title="Virtual machines" description="Hypervisor guests in the CMDB." assetType="vm" />
+  );
 }
 export function K8sPage() {
-  return <AssetTable title="Kubernetes" assetType="kubernetes_cluster" />;
+  return (
+    <AssetTable
+      eyebrow="Compute"
+      title="Kubernetes"
+      description="Clusters and control planes as configuration items."
+      assetType="kubernetes_cluster"
+    />
+  );
 }
 export function StoragePage() {
-  return <JsonTable title="Storage" path="/api/v1/storage" />;
+  return <StorageBoard />;
 }
 export function CoolingPage() {
-  return <JsonTable title="Cooling" path="/api/v1/cooling" description="Air + liquid loop, CDU, pumps, chillers, cold plates." />;
+  return <CoolingBoard />;
 }
 export function PowerPage() {
-  return <JsonTable title="Power" path="/api/v1/power" description="Utility → UPS → PDU → PSU chain." />;
+  return <PowerBoard />;
 }
 export function AlertsPage() {
-  return <JsonTable title="Alerts" path="/api/v1/alerts" />;
+  return <AlertsBoard />;
 }
 export function IncidentsPage() {
-  return <JsonTable title="Incidents" path="/api/v1/incidents" />;
+  return <IncidentsBoard />;
 }
 export function ChangesPage() {
-  return <JsonTable title="Changes" path="/api/v1/changes" />;
+  return <ChangesBoard />;
 }
 export function MaintPage() {
-  return <JsonTable title="Maintenance" path="/api/v1/maintenance" />;
+  return <MaintenanceBoard />;
 }
 export function SubnetsPage() {
-  return <JsonTable title="IPAM" path="/api/v1/ipam/subnets" />;
+  return <IpamBoard />;
 }
 export function VlansPage() {
-  return <JsonTable title="VLANs" path="/api/v1/ipam/vlans" />;
+  return <VlansBoard />;
 }
 export function DnsPage() {
-  return <JsonTable title="DNS" path="/api/v1/ipam/dns" />;
+  return <DnsBoard />;
 }
 export function NetworksPage() {
-  return <JsonTable title="Network" path="/api/v1/ipam/networks" />;
+  return <NetworksBoard />;
 }
 export function RelPage() {
-  return <JsonTable title="CMDB relationships" path="/api/v1/cmdb/relationships" />;
+  return <RelationshipsBoard />;
 }
 export function CapacityPage() {
-  return <JsonTable title="Capacity" path="/api/v1/capacity" />;
-}
-export function SitesPage() {
-  return <JsonTable title="Sites" path="/api/v1/data-centers" />;
+  return <GpuCapacityBoard />;
 }
 export function CloudPage() {
-  return <JsonTable title="Cloud accounts" path="/api/v1/cloud/accounts" />;
+  return <CloudBoard />;
 }
 export function UsersPage() {
-  return <JsonTable title="Users" path="/api/v1/users" />;
+  return <UsersBoard />;
 }
 export function AuditPage() {
-  return <JsonTable title="Audit logs" path="/api/v1/audit" />;
+  return <AuditBoard />;
 }
 export function VendorsPage() {
-  return <JsonTable title="Vendors" path="/api/v1/vendors" />;
+  return <VendorsBoard />;
 }
 export function WarrantyPage() {
-  return <JsonTable title="Warranties" path="/api/v1/warranties" />;
+  return <WarrantyBoard />;
 }
 export function ContractsPage() {
-  return <JsonTable title="Contracts" path="/api/v1/contracts" />;
+  return <ContractsBoard />;
 }
 export function LicensesPage() {
-  return <JsonTable title="Licenses" path="/api/v1/licenses" />;
+  return <LicensesBoard />;
 }
 export function PredictPage() {
-  return <JsonTable title="Predictions" path="/api/v1/predictions" description="Evidence-backed forecasts only." />;
+  return <PredictionsBoard />;
 }
 export function AddressesPage() {
-  return <JsonTable title="IP addresses" path="/api/v1/ipam/addresses" />;
+  return <AddressesBoard />;
 }

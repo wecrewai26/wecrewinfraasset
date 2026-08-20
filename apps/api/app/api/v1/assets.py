@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import Principal, get_current_user, require_write
 from app.core.db import get_db
 from app.models.asset import Asset, AssetAttribute
+from app.models.cmdb import Relationship
+from app.models.datacenter import Rack, Room, Site
+from app.models.network import IpAddress
+from app.models.ops import Alert
 from app.schemas.common import AssetCreate, AssetList, AssetOut
 from app.services.audit import audit
 
@@ -88,9 +92,88 @@ def get_asset(
 ) -> dict:
     asset = _get(db, principal.tenant_id, asset_id)
     attrs = db.query(AssetAttribute).filter(AssetAttribute.asset_id == asset.id).all()
+    site = db.query(Site).filter(Site.id == asset.site_id).one_or_none() if asset.site_id else None
+    room = db.query(Room).filter(Room.id == asset.room_id).one_or_none() if asset.room_id else None
+    rack = db.query(Rack).filter(Rack.id == asset.rack_id).one_or_none() if asset.rack_id else None
+    rels = (
+        db.query(Relationship)
+        .filter(
+            Relationship.tenant_id == principal.tenant_id,
+            or_(Relationship.source_id == asset.id, Relationship.target_id == asset.id),
+        )
+        .all()
+    )
+    peer_ids = {r.target_id if r.source_id == asset.id else r.source_id for r in rels}
+    peers = {
+        a.id: a
+        for a in db.query(Asset).filter(Asset.tenant_id == principal.tenant_id, Asset.id.in_(peer_ids or ["-"])).all()
+    }
+    alerts = (
+        db.query(Alert)
+        .filter(Alert.tenant_id == principal.tenant_id, Alert.asset_id == asset.id)
+        .order_by(Alert.fired_at.desc())
+        .limit(25)
+        .all()
+    )
+    addresses = db.query(IpAddress).filter(IpAddress.asset_id == asset.id).all()
+
+    def peer_ref(pid: str) -> dict:
+        peer = peers.get(pid)
+        if peer is None:
+            return {"id": pid, "name": pid[:8], "asset_type": "unknown", "health": "unknown"}
+        return {"id": peer.id, "name": peer.name, "asset_type": peer.asset_type, "health": peer.health}
+
     return {
-        **AssetOut.model_validate(asset).model_dump(),
+        **AssetOut.model_validate(asset).model_dump(mode="json"),
+        "purchase_date": asset.purchase_date.isoformat() if asset.purchase_date else None,
+        "eos_date": asset.eos_date.isoformat() if asset.eos_date else None,
+        "cost": asset.cost,
+        "currency": asset.currency,
+        "tags": asset.tags,
+        "location": {
+            "site_id": asset.site_id,
+            "site_name": site.name if site else None,
+            "site_code": site.code if site else None,
+            "room_id": asset.room_id,
+            "room_name": room.name if room else None,
+            "rack_id": asset.rack_id,
+            "rack_name": rack.name if rack else None,
+            "rack_unit": asset.rack_unit,
+            "rack_unit_height": asset.rack_unit_height,
+        },
         "attributes": [{"key": a.key, "value": a.value, "unit": a.unit, "source": a.source} for a in attrs],
+        "relationships": [
+            {
+                "id": r.id,
+                "rel_type": r.rel_type,
+                "confidence": r.confidence,
+                "direction": "outbound" if r.source_id == asset.id else "inbound",
+                "peer": peer_ref(r.target_id if r.source_id == asset.id else r.source_id),
+            }
+            for r in rels
+        ],
+        "alerts": [
+            {
+                "id": a.id,
+                "title": a.title,
+                "severity": a.severity,
+                "status": a.status,
+                "message": a.message,
+                "source": a.source,
+                "fired_at": a.fired_at.isoformat() if a.fired_at else None,
+            }
+            for a in alerts
+        ],
+        "addresses": [
+            {
+                "id": ip.id,
+                "address": ip.address,
+                "status": ip.status,
+                "role": ip.role,
+                "dns_name": ip.dns_name,
+            }
+            for ip in addresses
+        ],
     }
 
 

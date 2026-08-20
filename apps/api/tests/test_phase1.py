@@ -89,6 +89,34 @@ def test_copilot_throttling(client: TestClient) -> None:
     assert body["evidence"]
 
 
+def test_asset_detail_includes_named_relations(client: TestClient) -> None:
+    headers = auth(client)
+    cdu = client.get("/api/v1/assets", params={"q": "CDU-03"}, headers=headers).json()["items"][0]
+    detail = client.get(f"/api/v1/assets/{cdu['id']}", headers=headers).json()
+    assert detail["name"] == "CDU-03"
+    assert detail["location"]["site_code"] == "CHN-DC1"
+    assert detail["attributes"]
+    assert detail["relationships"]
+    assert all("name" in edge["peer"] for edge in detail["relationships"])
+    rels = client.get("/api/v1/cmdb/relationships", headers=headers).json()
+    assert rels
+    assert "name" in rels[0]["source"]
+    assert "name" in rels[0]["target"]
+
+
+def test_ops_detail_resolves_asset_names(client: TestClient) -> None:
+    headers = auth(client)
+    alerts = client.get("/api/v1/alerts", headers=headers).json()["items"]
+    assert alerts
+    detail = client.get(f"/api/v1/alerts/{alerts[0]['id']}", headers=headers).json()
+    assert detail["title"]
+    assert detail["asset"]["name"]
+    incidents = client.get("/api/v1/incidents", headers=headers).json()["items"]
+    inc = client.get(f"/api/v1/incidents/{incidents[0]['id']}", headers=headers).json()
+    assert inc["alerts"]
+    assert inc["assets"]
+
+
 def test_unauthenticated_rejected(client: TestClient) -> None:
     assert client.get("/api/v1/assets").status_code == 401
 
@@ -124,6 +152,17 @@ def test_signup_duplicate_email(client: TestClient) -> None:
     }
     response = client.post("/api/v1/auth/signup", json=payload)
     assert response.status_code == 409
+
+
+def test_seed_is_idempotent(client: TestClient, db) -> None:
+    from app.seed.seed import seed
+
+    seed(db)
+    headers = auth(client)
+    gpus = client.get("/api/v1/assets", params={"asset_type": "gpu"}, headers=headers).json()
+    assert gpus["total"] == 32
+    sites = client.get("/api/v1/data-centers", headers=headers).json()
+    assert len(sites["items"]) >= 1
 
 
 def test_signup_password_mismatch(client: TestClient) -> None:

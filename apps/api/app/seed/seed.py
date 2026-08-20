@@ -25,16 +25,24 @@ def _id() -> str:
 
 
 def seed_if_empty(db: Session) -> None:
-    if db.query(Tenant).first():
+    if db.query(Site).filter(Site.code == "CHN-DC1").first():
         return
     seed(db)
 
 
 def seed(db: Session, *, reset: bool = False) -> dict:
-    tenant_id = _id()
-    tenant = Tenant(id=tenant_id, name="WeCrew", slug="wecrew")
-    db.add(tenant)
-    db.flush()
+    tenant = db.query(Tenant).filter(Tenant.slug == "wecrew").one_or_none()
+    if tenant is None:
+        tenant_id = _id()
+        tenant = Tenant(id=tenant_id, name="WeCrew", slug="wecrew")
+        db.add(tenant)
+        db.flush()
+    else:
+        tenant_id = tenant.id
+        tenant.name = "WeCrew"
+
+    if db.query(Site).filter(Site.tenant_id == tenant_id, Site.code == "CHN-DC1").first():
+        return {"tenant_id": tenant_id, "site": "CHN-DC1", "status": "exists"}
 
     users = {
         "admin": User(
@@ -74,7 +82,11 @@ def seed(db: Session, *, reset: bool = False) -> dict:
             team="Leadership",
         ),
     }
-    db.add_all(users.values())
+    existing_emails = {
+        email
+        for (email,) in db.query(User.email).filter(User.email.in_([u.email for u in users.values()]))
+    }
+    db.add_all([user for user in users.values() if user.email not in existing_emails])
 
     nvidia = Vendor(id=_id(), tenant_id=tenant_id, name="NVIDIA", category="gpu", support_email="enterprise@nvidia.com")
     dell = Vendor(id=_id(), tenant_id=tenant_id, name="Dell", category="server")
@@ -495,12 +507,15 @@ def seed(db: Session, *, reset: bool = False) -> dict:
 
     lan = Network(id=_id(), tenant_id=tenant_id, name="CHN-DC1 Fabric", network_type="ai_fabric", site_id=site.id)
     db.add(lan)
+    db.flush()
     vlan_mgmt = Vlan(id=_id(), tenant_id=tenant_id, network_id=lan.id, vlan_id=10, name="mgmt", purpose="OOB")
     vlan_gpu = Vlan(id=_id(), tenant_id=tenant_id, network_id=lan.id, vlan_id=100, name="gpu-data", purpose="RoCEv2")
     db.add_all([vlan_mgmt, vlan_gpu])
+    db.flush()
     sn_mgmt = Subnet(id=_id(), tenant_id=tenant_id, vlan_id=vlan_mgmt.id, site_id=site.id, cidr="10.42.0.0/24", gateway="10.42.0.1", purpose="mgmt", utilization_percent=22)
     sn_gpu = Subnet(id=_id(), tenant_id=tenant_id, vlan_id=vlan_gpu.id, site_id=site.id, cidr="10.42.10.0/24", gateway="10.42.10.1", purpose="gpu", utilization_percent=41)
     db.add_all([sn_mgmt, sn_gpu])
+    db.flush()
     for node in gpu_nodes:
         db.add(
             IpAddress(
@@ -530,6 +545,7 @@ def seed(db: Session, *, reset: bool = False) -> dict:
     azure = CloudAccount(id=_id(), tenant_id=tenant_id, provider="azure", name="WeCrew Corp", account_id="sub-9aa1")
     gcp = CloudAccount(id=_id(), tenant_id=tenant_id, provider="gcp", name="WeCrew Analytics", account_id="wecrew-analytics")
     db.add_all([aws, azure, gcp])
+    db.flush()
     eks = CloudResource(id=_id(), tenant_id=tenant_id, account_id=aws.id, provider="aws", resource_type="eks", name="prod-eks", region="ap-south-1", native_id="arn:aws:eks:ap-south-1:111122223333:cluster/prod-eks")
     dx = CloudResource(id=_id(), tenant_id=tenant_id, account_id=aws.id, provider="aws", resource_type="direct_connect", name="CHN-DX", region="ap-south-1", native_id="dxcon-abc")
     s3 = CloudResource(id=_id(), tenant_id=tenant_id, account_id=aws.id, provider="aws", resource_type="s3", name="wecrew-checkpoints", region="ap-south-1", native_id="wecrew-checkpoints")

@@ -261,7 +261,7 @@ export default function CommandCentrePage() {
             {openIncidents.map((i) => (
               <Link
                 key={i.id}
-                href="/ops/incidents"
+                href={`/ops/incidents/${i.id}`}
                 className="block rounded-xl border border-line bg-panel/60 p-3 hover:border-coral/30"
               >
                 <div className="flex items-start justify-between gap-2">
@@ -284,7 +284,7 @@ export default function CommandCentrePage() {
           <p className="mb-4 text-sm text-muted">Live from telemetry and discovery</p>
           <div className="space-y-3">
             {(alerts?.items ?? []).slice(0, 6).map((a) => (
-              <Link key={a.id} href="/ops/alerts" className="block border-b border-line pb-2 last:border-0">
+              <Link key={a.id} href={`/ops/alerts/${a.id}`} className="block border-b border-line pb-2 last:border-0">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-medium">{a.title}</p>
                   <span className={`text-[11px] uppercase ${a.severity === "critical" ? "text-crit" : "text-warn"}`}>

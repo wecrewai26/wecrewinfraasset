@@ -11,7 +11,6 @@ from app.models.cmdb import Relationship
 from app.models.datacenter import Rack, Site
 from app.models.ops import Alert, Incident
 from app.models.telemetry import TelemetrySample
-from app.schemas.common import RelationshipOut
 from app.services.graph import topology_graph
 
 cmdb_router = APIRouter(prefix="/cmdb", tags=["cmdb"])
@@ -19,20 +18,44 @@ topology_router = APIRouter(prefix="/topology", tags=["topology"])
 overview_router = APIRouter(prefix="/overview", tags=["overview"])
 
 
-@cmdb_router.get("/relationships", response_model=list[RelationshipOut])
+@cmdb_router.get("/relationships")
 def relationships(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(get_current_user)],
     rel_type: str | None = None,
     asset_id: str | None = None,
     limit: int = Query(500, le=5000),
-) -> list[Relationship]:
+) -> list[dict]:
     q = db.query(Relationship).filter(Relationship.tenant_id == principal.tenant_id)
     if rel_type:
         q = q.filter(Relationship.rel_type == rel_type)
     if asset_id:
         q = q.filter((Relationship.source_id == asset_id) | (Relationship.target_id == asset_id))
-    return q.limit(limit).all()
+    rows = q.limit(limit).all()
+    ids = {r.source_id for r in rows} | {r.target_id for r in rows}
+    assets = {
+        a.id: a
+        for a in db.query(Asset).filter(Asset.tenant_id == principal.tenant_id, Asset.id.in_(ids or ["-"])).all()
+    }
+
+    def ref(aid: str) -> dict:
+        asset = assets.get(aid)
+        if asset is None:
+            return {"id": aid, "name": aid[:8], "asset_type": "unknown", "health": "unknown"}
+        return {"id": asset.id, "name": asset.name, "asset_type": asset.asset_type, "health": asset.health}
+
+    return [
+        {
+            "id": r.id,
+            "rel_type": r.rel_type,
+            "confidence": r.confidence,
+            "source_id": r.source_id,
+            "target_id": r.target_id,
+            "source": ref(r.source_id),
+            "target": ref(r.target_id),
+        }
+        for r in rows
+    ]
 
 
 @topology_router.get("")

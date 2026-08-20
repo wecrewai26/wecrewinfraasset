@@ -3,8 +3,13 @@ export function cn(...parts: Array<string | false | null | undefined>) {
 }
 
 export function healthTone(value?: string) {
-  if (value === "healthy" || value === "online" || value === "PASS") return "text-signal";
-  if (value === "degraded" || value === "warning" || value === "WARNING") return "text-warn";
-  if (value === "unhealthy" || value === "critical" || value === "FAIL" || value === "offline") return "text-crit";
+  const v = (value || "").toLowerCase();
+  if (["healthy", "online", "pass", "connected", "active", "allocated", "running", "resolved", "ok"].includes(v)) {
+    return "text-signal";
+  }
+  if (["degraded", "warning", "warn", "open", "firing", "investigating", "scheduled", "high", "medium"].includes(v)) {
+    return "text-warn";
+  }
+  if (["unhealthy", "critical", "fail", "offline", "p1", "error"].includes(v)) return "text-crit";
   return "text-muted";
 }
