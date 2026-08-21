@@ -14,12 +14,14 @@ import {
   IncidentsBoard,
   IpamBoard,
   LicensesBoard,
+  LiquidBoard,
   MaintenanceBoard,
   NetworksBoard,
   PowerBoard,
   PredictionsBoard,
   RelationshipsBoard,
   StorageBoard,
+  ThermalBoard,
   UsersBoard,
   VendorsBoard,
   VlansBoard,
@@ -76,6 +78,12 @@ export function StoragePage() {
 }
 export function CoolingPage() {
   return <CoolingBoard />;
+}
+export function LiquidPage() {
+  return <LiquidBoard />;
+}
+export function ThermalPage() {
+  return <ThermalBoard />;
 }
 export function PowerPage() {
   return <PowerBoard />;

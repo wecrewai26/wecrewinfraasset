@@ -138,6 +138,26 @@ def test_rack_detail_includes_servers_and_ips(client: TestClient) -> None:
     assert any(addr["asset_name"] == "gpu-node-01" for addr in detail["addresses"])
 
 
+def test_lifecycle_dossiers_name_assets_and_vendors(client: TestClient) -> None:
+    headers = auth(client)
+    warranties = client.get("/api/v1/warranties", headers=headers).json()["items"]
+    assert warranties
+    row = warranties[0]
+    assert row["asset"]["name"].startswith("gpu-node")
+    assert row["vendor"]["name"] == "Supermicro"
+    detail = client.get(f"/api/v1/warranties/{row['id']}", headers=headers).json()
+    assert detail["asset"]["serial_number"]
+    vendors = client.get("/api/v1/vendors", headers=headers).json()["items"]
+    supermicro = next(v for v in vendors if v["name"] == "Supermicro")
+    assert supermicro["asset_count"] >= 4
+    dossier = client.get(f"/api/v1/vendors/{supermicro['id']}", headers=headers).json()
+    assert any(a["name"] == "gpu-node-01" for a in dossier["assets"])
+    contracts = client.get("/api/v1/contracts", headers=headers).json()["items"]
+    assert contracts[0]["vendor"]["name"] == "Vertiv"
+    licenses = client.get("/api/v1/licenses", headers=headers).json()["items"]
+    assert licenses[0]["vendor"]["name"] == "Dell"
+
+
 def test_unauthenticated_rejected(client: TestClient) -> None:
     assert client.get("/api/v1/assets").status_code == 401
 

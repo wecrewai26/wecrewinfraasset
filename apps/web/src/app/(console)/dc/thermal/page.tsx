@@ -1,3 +1,3 @@
 "use client";
-import { CoolingPage } from "@/components/assets/module-pages";
-export default CoolingPage;
+import { ThermalPage } from "@/components/assets/module-pages";
+export default ThermalPage;
