@@ -24,8 +24,166 @@ def _id() -> str:
     return str(uuid4())
 
 
+def _bind_ip(
+    db: Session,
+    tenant_id: str,
+    asset: Asset,
+    address: str,
+    subnet_id: str | None,
+    role: str,
+    dns_name: str | None,
+) -> None:
+    if not address:
+        return
+    existing = (
+        db.query(IpAddress)
+        .filter(IpAddress.tenant_id == tenant_id, IpAddress.address == address)
+        .one_or_none()
+    )
+    if existing is None:
+        db.add(
+            IpAddress(
+                id=_id(),
+                tenant_id=tenant_id,
+                subnet_id=subnet_id,
+                asset_id=asset.id,
+                address=address,
+                status="allocated",
+                role=role,
+                dns_name=dns_name,
+            )
+        )
+    elif existing.asset_id is None:
+        existing.asset_id = asset.id
+        existing.role = existing.role or role
+        existing.dns_name = existing.dns_name or dns_name
+    if dns_name:
+        dns = (
+            db.query(DnsRecord)
+            .filter(DnsRecord.tenant_id == tenant_id, DnsRecord.name == dns_name, DnsRecord.value == address)
+            .one_or_none()
+        )
+        if dns is None:
+            zone = dns_name.split(".", 1)[1] if "." in dns_name else "chn.wecrew.in"
+            db.add(
+                DnsRecord(
+                    id=_id(),
+                    tenant_id=tenant_id,
+                    name=dns_name,
+                    record_type="A",
+                    value=address,
+                    zone=zone,
+                    asset_id=asset.id,
+                )
+            )
+
+
+def enrich_demo_rack_identity(db: Session) -> None:
+    """Fill missing hostnames/IPs on the live Chennai demo without reseeding."""
+    site = db.query(Site).filter(Site.code == "CHN-DC1").one_or_none()
+    if site is None:
+        return
+    tenant_id = site.tenant_id
+    rack = db.query(Rack).filter(Rack.tenant_id == tenant_id, Rack.name == "R42").one_or_none()
+    if rack is None:
+        return
+
+    vlan_mgmt = db.query(Vlan).filter(Vlan.tenant_id == tenant_id, Vlan.vlan_id == 10).one_or_none()
+    sn_gpu = db.query(Subnet).filter(Subnet.tenant_id == tenant_id, Subnet.cidr == "10.42.10.0/24").one_or_none()
+    sn_oob = db.query(Subnet).filter(Subnet.tenant_id == tenant_id, Subnet.cidr == "10.42.1.0/24").one_or_none()
+    if sn_oob is None and vlan_mgmt is not None:
+        sn_oob = Subnet(
+            id=_id(),
+            tenant_id=tenant_id,
+            vlan_id=vlan_mgmt.id,
+            site_id=site.id,
+            cidr="10.42.1.0/24",
+            gateway="10.42.1.1",
+            purpose="oob",
+            utilization_percent=18,
+        )
+        db.add(sn_oob)
+        db.flush()
+
+    patches = {
+        "TOR-R42": {
+            "hostname": "tor-r42",
+            "fqdn": "tor-r42.chn.wecrew.in",
+            "management_ip": "10.42.1.2",
+            "serial_number": "AR-TOR-0042",
+            "rack_unit": 42,
+            "role": "mgmt",
+            "subnet": sn_oob,
+        },
+        "IB-LEAF-R42": {
+            "hostname": "ib-leaf-r42",
+            "fqdn": "ib-leaf-r42.chn.wecrew.in",
+            "management_ip": "10.42.1.3",
+            "serial_number": "NV-QM-0042",
+            "rack_unit": 41,
+            "role": "mgmt",
+            "subnet": sn_oob,
+        },
+        "PDU-R42-A": {
+            "hostname": "pdu-r42-a",
+            "fqdn": "pdu-r42-a.chn.wecrew.in",
+            "management_ip": "10.42.1.21",
+            "serial_number": "RT-PDU-42A",
+            "model": "PX3-5882",
+            "role": "mgmt",
+            "subnet": sn_oob,
+        },
+        "PDU-R42-B": {
+            "hostname": "pdu-r42-b",
+            "fqdn": "pdu-r42-b.chn.wecrew.in",
+            "management_ip": "10.42.1.22",
+            "serial_number": "RT-PDU-42B",
+            "model": "PX3-5882",
+            "role": "mgmt",
+            "subnet": sn_oob,
+        },
+    }
+    for name, fields in patches.items():
+        asset = db.query(Asset).filter(Asset.tenant_id == tenant_id, Asset.name == name).one_or_none()
+        if asset is None:
+            continue
+        for key in ("hostname", "fqdn", "management_ip", "serial_number", "model"):
+            if fields.get(key) and not getattr(asset, key):
+                setattr(asset, key, fields[key])
+        if fields.get("rack_unit") and not asset.rack_unit:
+            asset.rack_unit = fields["rack_unit"]
+            asset.rack_unit_height = asset.rack_unit_height or 1
+        subnet = fields.get("subnet")
+        _bind_ip(
+            db,
+            tenant_id,
+            asset,
+            asset.management_ip or "",
+            subnet.id if subnet else None,
+            str(fields["role"]),
+            asset.fqdn,
+        )
+
+    for i in range(1, 5):
+        node = db.query(Asset).filter(Asset.tenant_id == tenant_id, Asset.name == f"gpu-node-{i:02d}").one_or_none()
+        if node is None:
+            continue
+        _bind_ip(db, tenant_id, node, node.management_ip or "", sn_gpu.id if sn_gpu else None, "bmc", node.fqdn)
+        _bind_ip(
+            db,
+            tenant_id,
+            node,
+            f"10.42.10.{100 + i}",
+            sn_gpu.id if sn_gpu else None,
+            "roce",
+            f"{node.hostname}-data.chn.wecrew.in" if node.hostname else None,
+        )
+    db.commit()
+
+
 def seed_if_empty(db: Session) -> None:
     if db.query(Site).filter(Site.code == "CHN-DC1").first():
+        enrich_demo_rack_identity(db)
         return
     seed(db)
 
@@ -268,8 +426,34 @@ def seed(db: Session, *, reset: bool = False) -> dict:
     sample(ups, "infraasset_ups_load_percent", 68, "percent")
 
     gen = asset(name="GEN-01", asset_type="generator", manufacturer="Caterpillar", model="C32", criticality="critical")
-    pdu_a = asset(name="PDU-R42-A", asset_type="pdu", rack_id=r42.id, room_id=gpu_hall.id, manufacturer="Raritan")
-    pdu_b = asset(name="PDU-R42-B", asset_type="pdu", rack_id=r42.id, room_id=gpu_hall.id, manufacturer="Raritan")
+    pdu_a = asset(
+        name="PDU-R42-A",
+        hostname="pdu-r42-a",
+        fqdn="pdu-r42-a.chn.wecrew.in",
+        asset_type="pdu",
+        rack_id=r42.id,
+        room_id=gpu_hall.id,
+        manufacturer="Raritan",
+        model="PX3-5882",
+        serial_number="RT-PDU-42A",
+        management_ip="10.42.1.21",
+        criticality="high",
+        business_service="Facility Power",
+    )
+    pdu_b = asset(
+        name="PDU-R42-B",
+        hostname="pdu-r42-b",
+        fqdn="pdu-r42-b.chn.wecrew.in",
+        asset_type="pdu",
+        rack_id=r42.id,
+        room_id=gpu_hall.id,
+        manufacturer="Raritan",
+        model="PX3-5882",
+        serial_number="RT-PDU-42B",
+        management_ip="10.42.1.22",
+        criticality="high",
+        business_service="Facility Power",
+    )
     attr(pdu_a, "load_percent", 86, "%")
     attr(pdu_b, "load_percent", 81, "%")
     sample(pdu_a, "infraasset_rack_power_kw", 21.0, "kW")
@@ -318,12 +502,17 @@ def seed(db: Session, *, reset: bool = False) -> dict:
     )
     tor = asset(
         name="TOR-R42",
+        hostname="tor-r42",
+        fqdn="tor-r42.chn.wecrew.in",
         asset_type="switch",
         asset_subtype="tor",
         manufacturer="Arista",
         model="7060DX4",
+        serial_number="AR-TOR-0042",
         rack_id=r42.id,
         room_id=gpu_hall.id,
+        rack_unit=42,
+        rack_unit_height=1,
         management_ip="10.42.1.2",
         criticality="high",
         business_service="AI Fabric",
@@ -338,7 +527,23 @@ def seed(db: Session, *, reset: bool = False) -> dict:
         criticality="critical",
         business_service="Hybrid Connectivity",
     )
-    ib = asset(name="IB-LEAF-R42", asset_type="switch", asset_subtype="infiniband", manufacturer="NVIDIA", model="QM9700", rack_id=r42.id)
+    ib = asset(
+        name="IB-LEAF-R42",
+        hostname="ib-leaf-r42",
+        fqdn="ib-leaf-r42.chn.wecrew.in",
+        asset_type="switch",
+        asset_subtype="infiniband",
+        manufacturer="NVIDIA",
+        model="QM9700",
+        serial_number="NV-QM-0042",
+        rack_id=r42.id,
+        room_id=gpu_hall.id,
+        rack_unit=41,
+        rack_unit_height=1,
+        management_ip="10.42.1.3",
+        criticality="high",
+        business_service="AI Fabric",
+    )
 
     k8s = asset(
         name="gpu-cluster",
@@ -513,33 +718,22 @@ def seed(db: Session, *, reset: bool = False) -> dict:
     db.add_all([vlan_mgmt, vlan_gpu])
     db.flush()
     sn_mgmt = Subnet(id=_id(), tenant_id=tenant_id, vlan_id=vlan_mgmt.id, site_id=site.id, cidr="10.42.0.0/24", gateway="10.42.0.1", purpose="mgmt", utilization_percent=22)
+    sn_oob = Subnet(id=_id(), tenant_id=tenant_id, vlan_id=vlan_mgmt.id, site_id=site.id, cidr="10.42.1.0/24", gateway="10.42.1.1", purpose="oob", utilization_percent=18)
     sn_gpu = Subnet(id=_id(), tenant_id=tenant_id, vlan_id=vlan_gpu.id, site_id=site.id, cidr="10.42.10.0/24", gateway="10.42.10.1", purpose="gpu", utilization_percent=41)
-    db.add_all([sn_mgmt, sn_gpu])
+    db.add_all([sn_mgmt, sn_oob, sn_gpu])
     db.flush()
-    for node in gpu_nodes:
-        db.add(
-            IpAddress(
-                id=_id(),
-                tenant_id=tenant_id,
-                subnet_id=sn_gpu.id,
-                asset_id=node.id,
-                address=node.management_ip or "",
-                status="allocated",
-                role="bmc",
-                dns_name=node.fqdn,
-            )
-        )
-        db.add(
-            DnsRecord(
-                id=_id(),
-                tenant_id=tenant_id,
-                name=node.fqdn or node.name,
-                record_type="A",
-                value=node.management_ip or "",
-                zone="chn.wecrew.in",
-                asset_id=node.id,
-            )
-        )
+    for i, node in enumerate(gpu_nodes, start=1):
+        _bind_ip(db, tenant_id, node, node.management_ip or "", sn_gpu.id, "bmc", node.fqdn)
+        _bind_ip(db, tenant_id, node, f"10.42.10.{100 + i}", sn_gpu.id, "roce", f"{node.hostname}-data.chn.wecrew.in")
+    for device, subnet in (
+        (tor, sn_oob),
+        (ib, sn_oob),
+        (pdu_a, sn_oob),
+        (pdu_b, sn_oob),
+        (spine, sn_mgmt),
+        (fw, sn_mgmt),
+    ):
+        _bind_ip(db, tenant_id, device, device.management_ip or "", subnet.id, "mgmt", device.fqdn)
 
     aws = CloudAccount(id=_id(), tenant_id=tenant_id, provider="aws", name="WeCrew Prod", account_id="111122223333", vault_path="secret/cloud/aws/prod")
     azure = CloudAccount(id=_id(), tenant_id=tenant_id, provider="azure", name="WeCrew Corp", account_id="sub-9aa1")

@@ -117,6 +117,27 @@ def test_ops_detail_resolves_asset_names(client: TestClient) -> None:
     assert inc["assets"]
 
 
+def test_rack_detail_includes_servers_and_ips(client: TestClient) -> None:
+    headers = auth(client)
+    racks = client.get("/api/v1/racks", headers=headers).json()["items"]
+    r42 = next(r for r in racks if r["name"] == "R42")
+    detail = client.get(f"/api/v1/racks/{r42['id']}", headers=headers).json()
+    servers = [row for row in detail["elevation"] if row["asset_type"] == "server"]
+    assert len(servers) == 4
+    node = next(row for row in servers if row["name"] == "gpu-node-01")
+    assert node["hostname"] == "gpu-node-01"
+    assert node["fqdn"] == "gpu-node-01.chn.wecrew.in"
+    assert node["management_ip"] == "10.42.10.11"
+    assert node["serial_number"] == "SM-GPU-0001"
+    assert node["gpu_count"] == 8
+    assert any(addr["address"] == "10.42.10.11" for addr in node["addresses"])
+    assert detail["location"]["site_code"] == "CHN-DC1"
+    assert "Siruseri" in (detail["location"]["address"] or "")
+    tor = next(row for row in detail["elevation"] if row["name"] == "TOR-R42")
+    assert tor["management_ip"] == "10.42.1.2"
+    assert any(addr["asset_name"] == "gpu-node-01" for addr in detail["addresses"])
+
+
 def test_unauthenticated_rejected(client: TestClient) -> None:
     assert client.get("/api/v1/assets").status_code == 401
 

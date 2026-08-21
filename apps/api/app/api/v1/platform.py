@@ -1,3 +1,4 @@
+from collections import Counter, defaultdict
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -53,6 +54,38 @@ def racks(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principa
     return {"items": [{**_dump(r), **rack_capacity(db, principal.tenant_id, r)} for r in rows]}
 
 
+def _addr_payload(ip: IpAddress, subnets: dict[str, Subnet], vlans: dict[str, Vlan]) -> dict:
+    subnet = subnets.get(ip.subnet_id) if ip.subnet_id else None
+    vlan = vlans.get(subnet.vlan_id) if subnet and subnet.vlan_id else None
+    return {
+        "id": ip.id,
+        "address": ip.address,
+        "role": ip.role,
+        "status": ip.status,
+        "dns_name": ip.dns_name,
+        "cidr": subnet.cidr if subnet else None,
+        "gateway": subnet.gateway if subnet else None,
+        "vlan": vlan.vlan_id if vlan else None,
+        "vlan_name": vlan.name if vlan else None,
+    }
+
+
+def _synthetic_addr(asset: Asset) -> dict | None:
+    if not asset.management_ip:
+        return None
+    role = "bmc" if asset.asset_type == "server" else "mgmt"
+    return {
+        "address": asset.management_ip,
+        "role": role,
+        "status": "allocated",
+        "dns_name": asset.fqdn,
+        "cidr": None,
+        "gateway": None,
+        "vlan": None,
+        "vlan_name": None,
+    }
+
+
 @dc_router.get("/racks/{rack_id}")
 def rack_detail(
     rack_id: str,
@@ -62,27 +95,94 @@ def rack_detail(
     rack = db.query(Rack).filter(Rack.id == rack_id, Rack.tenant_id == principal.tenant_id).one_or_none()
     if rack is None:
         raise HTTPException(404, "Rack not found")
+    site = db.query(Site).filter(Site.id == rack.site_id).one_or_none()
+    room = db.query(Room).filter(Room.id == rack.room_id).one_or_none()
+    row = db.query(Row).filter(Row.id == rack.row_id).one_or_none()
+    building = db.query(Building).filter(Building.id == room.building_id).one_or_none() if room else None
     assets = (
         db.query(Asset)
         .filter(Asset.tenant_id == principal.tenant_id, Asset.rack_id == rack.id)
         .order_by(Asset.rack_unit.asc().nullslast(), Asset.name)
         .all()
     )
+    asset_ids = [a.id for a in assets]
+    ips = db.query(IpAddress).filter(IpAddress.asset_id.in_(asset_ids or ["-"])).all()
+    subnet_ids = {ip.subnet_id for ip in ips if ip.subnet_id}
+    subnets = {
+        s.id: s for s in db.query(Subnet).filter(Subnet.id.in_(subnet_ids or ["-"])).all()
+    }
+    vlan_ids = {s.vlan_id for s in subnets.values() if s.vlan_id}
+    vlans = {v.id: v for v in db.query(Vlan).filter(Vlan.id.in_(vlan_ids or ["-"])).all()}
+    ips_by_asset: dict[str, list[dict]] = defaultdict(list)
+    for ip in ips:
+        if ip.asset_id:
+            ips_by_asset[ip.asset_id].append(_addr_payload(ip, subnets, vlans))
+
+    gpu_ids = {a.id for a in assets if a.asset_type == "gpu"}
+    server_ids = [a.id for a in assets if a.asset_type == "server"]
+    contains = (
+        db.query(Relationship)
+        .filter(
+            Relationship.tenant_id == principal.tenant_id,
+            Relationship.rel_type == "CONTAINS",
+            Relationship.source_id.in_(server_ids or ["-"]),
+        )
+        .all()
+    )
+    gpus_by_server: Counter[str] = Counter()
+    for rel in contains:
+        if rel.target_id in gpu_ids:
+            gpus_by_server[rel.source_id] += 1
+
+    occupancy = []
+    for asset in assets:
+        addresses = list(ips_by_asset.get(asset.id, []))
+        synthetic = _synthetic_addr(asset)
+        if synthetic and not any(row["address"] == synthetic["address"] for row in addresses):
+            addresses.insert(0, synthetic)
+        occupancy.append(
+            {
+                "id": asset.id,
+                "name": asset.name,
+                "asset_type": asset.asset_type,
+                "asset_subtype": asset.asset_subtype,
+                "hostname": asset.hostname,
+                "fqdn": asset.fqdn,
+                "serial_number": asset.serial_number,
+                "manufacturer": asset.manufacturer,
+                "model": asset.model,
+                "management_ip": asset.management_ip,
+                "rack_unit": asset.rack_unit,
+                "rack_unit_height": asset.rack_unit_height or 1,
+                "status": asset.status,
+                "health": asset.health,
+                "environment": asset.environment,
+                "criticality": asset.criticality,
+                "business_service": asset.business_service,
+                "gpu_count": gpus_by_server.get(asset.id, 0),
+                "addresses": addresses,
+            }
+        )
+
     return {
         **_dump(rack),
+        "location": {
+            "site_id": site.id if site else None,
+            "site_code": site.code if site else None,
+            "site_name": site.name if site else None,
+            "city": site.city if site else None,
+            "country": site.country if site else None,
+            "address": site.address if site else None,
+            "building": building.name if building else None,
+            "room": room.name if room else None,
+            "row": row.name if row else None,
+        },
         "capacity": rack_capacity(db, principal.tenant_id, rack),
-        "elevation": [
-            {
-                "id": a.id,
-                "name": a.name,
-                "asset_type": a.asset_type,
-                "rack_unit": a.rack_unit,
-                "rack_unit_height": a.rack_unit_height or 1,
-                "status": a.status,
-                "health": a.health,
-                "model": a.model,
-            }
-            for a in assets
+        "elevation": occupancy,
+        "addresses": [
+            {**addr, "asset_id": asset["id"], "asset_name": asset["name"], "asset_type": asset["asset_type"]}
+            for asset in occupancy
+            for addr in asset["addresses"]
         ],
     }
 
