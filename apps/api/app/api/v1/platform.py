@@ -275,6 +275,7 @@ def storage(db: Annotated[Session, Depends(get_db)], principal: Annotated[Princi
 
 def _asset_with_attrs(db: Session, asset: Asset) -> dict:
     attrs = db.query(AssetAttribute).filter(AssetAttribute.asset_id == asset.id).all()
+    rack = db.query(Rack).filter(Rack.id == asset.rack_id).one_or_none() if asset.rack_id else None
     return {
         "id": asset.id,
         "name": asset.name,
@@ -282,7 +283,12 @@ def _asset_with_attrs(db: Session, asset: Asset) -> dict:
         "health": asset.health,
         "status": asset.status,
         "model": asset.model,
+        "manufacturer": asset.manufacturer,
+        "hostname": asset.hostname,
+        "management_ip": asset.management_ip,
+        "serial_number": asset.serial_number,
         "rack_id": asset.rack_id,
+        "rack_name": rack.name if rack else None,
         "attributes": {a.key: a.value for a in attrs},
     }
 

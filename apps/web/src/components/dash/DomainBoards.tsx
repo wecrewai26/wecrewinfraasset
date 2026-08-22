@@ -72,6 +72,12 @@ type Facility = {
   health: string;
   status: string;
   model?: string;
+  manufacturer?: string;
+  hostname?: string;
+  management_ip?: string;
+  serial_number?: string;
+  rack_id?: string;
+  rack_name?: string;
   attributes?: Record<string, string>;
 };
 type CapRow = {
@@ -90,10 +96,36 @@ type CloudResource = { id: string; provider: string; name: string; resource_type
 type User = { id: string; email: string; full_name: string; role: string; team?: string; is_active: boolean };
 type Audit = { id: string; action: string; actor_email?: string; resource_type: string; details?: string; created_at?: string };
 type Cred = { id: string; name: string; protocol: string; username?: string; vault_path?: string; has_secret: boolean };
-type Vendor = { id: string; name: string; category: string; support_email?: string };
-type Warranty = { id: string; coverage: string; start_date?: string; end_date?: string };
-type Contract = { id: string; name: string; contract_type: string; value?: number; currency?: string; end_date?: string };
-type License = { id: string; name: string; seats?: number; used?: number; expiry?: string };
+type NamedRef = { id: string; name: string; asset_type?: string; health?: string; category?: string };
+type Vendor = { id: string; name: string; category: string; support_email?: string; support_phone?: string; asset_count?: number };
+type Warranty = {
+  id: string;
+  coverage: string;
+  start_date?: string;
+  end_date?: string;
+  asset?: NamedRef | null;
+  vendor?: NamedRef | null;
+};
+type Contract = {
+  id: string;
+  name: string;
+  contract_type: string;
+  value?: number;
+  currency?: string;
+  start_date?: string;
+  end_date?: string;
+  notes?: string;
+  vendor?: NamedRef | null;
+};
+type License = {
+  id: string;
+  name: string;
+  seats?: number;
+  used?: number;
+  expiry?: string;
+  vendor?: NamedRef | null;
+  asset?: NamedRef | null;
+};
 type Rel = {
   id: string;
   rel_type: string;
@@ -368,25 +400,21 @@ function FacilityBoard({
   title,
   eyebrow,
   description,
+  types,
+  embedded,
 }: {
   path: string;
   title: string;
   eyebrow: string;
   description: string;
+  types?: string[];
+  embedded?: boolean;
 }) {
-  const { data: rows = [] } = useItems<Facility>(path);
+  const { data: all = [] } = useItems<Facility>(path);
+  const rows = types ? all.filter((r) => types.includes(r.asset_type)) : all;
   const unhealthy = rows.filter((r) => r.health !== "healthy").length;
-  return (
-    <div>
-      <PageHeader eyebrow={eyebrow} title={title} description={description} meta={`${rows.length} assets`} />
-      <KpiGrid
-        items={[
-          { label: "Assets", value: rows.length, hint: "cmdb" },
-          { label: "Attention", value: unhealthy, hint: "not healthy", warn: unhealthy > 0 },
-          { label: "Types", value: new Set(rows.map((r) => r.asset_type)).size, hint: "classes" },
-          { label: "Online", value: rows.filter((r) => r.status === "online" || r.status === "healthy").length, hint: "status" },
-        ]}
-      />
+  const cards = (
+    <>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {rows.map((a) => {
           const attrs = Object.entries(a.attributes ?? {}).slice(0, 4);
@@ -396,7 +424,9 @@ function FacilityBoard({
                 <div>
                   <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">{a.asset_type}</p>
                   <h2 className="font-display mt-1 text-lg font-semibold">{a.name}</h2>
-                  <p className="text-xs text-muted">{a.model || "—"}</p>
+                  <p className="text-xs text-muted">{[a.manufacturer, a.model].filter(Boolean).join(" ") || "—"}</p>
+                  {a.management_ip ? <p className="mt-1 font-mono text-[11px] text-muted">{a.management_ip}</p> : null}
+                  {a.rack_name ? <p className="mt-1 text-[11px] text-muted">{a.rack_name}</p> : null}
                 </div>
                 <StatusChip value={a.health} />
               </div>
@@ -415,6 +445,21 @@ function FacilityBoard({
         })}
       </div>
       {rows.length === 0 ? <EmptyState label="No assets in this class." /> : null}
+    </>
+  );
+  if (embedded) return <div className="mt-4">{cards}</div>;
+  return (
+    <div>
+      <PageHeader eyebrow={eyebrow} title={title} description={description} meta={`${rows.length} assets`} />
+      <KpiGrid
+        items={[
+          { label: "Assets", value: rows.length, hint: "cmdb" },
+          { label: "Attention", value: unhealthy, hint: "not healthy", warn: unhealthy > 0 },
+          { label: "Types", value: new Set(rows.map((r) => r.asset_type)).size, hint: "classes" },
+          { label: "Online", value: rows.filter((r) => r.status === "online" || r.status === "healthy").length, hint: "status" },
+        ]}
+      />
+      {cards}
     </div>
   );
 }
@@ -438,6 +483,86 @@ export function CoolingBoard() {
       title="Cooling"
       description="Air and liquid loop — CDU, pumps, chillers, cold plates."
     />
+  );
+}
+
+const LIQUID_TYPES = ["cdu", "pump", "heat_exchanger", "cold_plate", "rack_manifold", "chiller"];
+const THERMAL_TYPES = ["crac", "crah"];
+
+export function LiquidBoard() {
+  return (
+    <FacilityBoard
+      path="/api/v1/cooling"
+      types={LIQUID_TYPES}
+      eyebrow="Data center"
+      title="Liquid cooling"
+      description="CDU, pumps, manifold and cold plates on the GPU hall loop — not the CRAH overlay."
+    />
+  );
+}
+
+export function ThermalBoard() {
+  const cooling = useItems<Facility>("/api/v1/cooling");
+  const gpus = useQuery({
+    queryKey: ["gpu"],
+    queryFn: () => api<{ items: { id: string; name: string; health: string; metrics: Record<string, { value: string }> }[] }>("/api/v1/gpu"),
+  });
+  const rooms = (cooling.data ?? []).filter((r) => THERMAL_TYPES.includes(r.asset_type));
+  const gpuRows = gpus.data?.items ?? [];
+  const hot = gpuRows.filter((g) => Number(g.metrics.gpu_temperature_c?.value) >= 80).length;
+  const hottest = gpuRows
+    .slice()
+    .sort((a, b) => Number(b.metrics.gpu_temperature_c?.value || 0) - Number(a.metrics.gpu_temperature_c?.value || 0))
+    .slice(0, 12);
+  return (
+    <div>
+      <PageHeader
+        eyebrow="Data center"
+        title="Thermal map"
+        description="Die temperature from DCGM plus hall CRAH/CRAC units. CDU loop lives under Liquid cooling."
+      />
+      <KpiGrid
+        items={[
+          { label: "GPUs", value: gpuRows.length, hint: "dcgm" },
+          { label: "Hot", value: hot, hint: "≥ 80°C", warn: hot > 0 },
+          { label: "CRAH / CRAC", value: rooms.length, hint: "air" },
+          {
+            label: "Peak die",
+            value: hottest[0]?.metrics.gpu_temperature_c?.value ? `${hottest[0].metrics.gpu_temperature_c.value}°C` : "—",
+            hint: hottest[0]?.name,
+          },
+        ]}
+      />
+      <div className="mb-4">
+        <Panel title="Hottest GPUs" subtitle="DCGM gpu_temperature_c">
+          <DataTable
+            rows={hottest}
+            columns={[
+              {
+                key: "name",
+                label: "GPU",
+                render: (g) => (
+                  <Link className="font-mono text-xs text-coral hover:underline" href={`/infrastructure/assets/${g.id}`}>
+                    {g.name}
+                  </Link>
+                ),
+              },
+              { key: "temp", label: "Temp", render: (g) => `${g.metrics.gpu_temperature_c?.value ?? "—"}°C` },
+              { key: "health", label: "Health", render: (g) => <StatusChip value={g.health} /> },
+            ]}
+          />
+        </Panel>
+      </div>
+      <p className="mb-3 font-display text-sm font-semibold">Hall air handlers</p>
+      <FacilityBoard
+        path="/api/v1/cooling"
+        types={THERMAL_TYPES}
+        eyebrow="Data center"
+        title="Hall air handlers"
+        description="CRAH / CRAC in the same graph as the liquid loop."
+        embedded
+      />
+    </div>
   );
 }
 
@@ -680,11 +805,12 @@ export function VendorsBoard() {
       <PageHeader eyebrow="Lifecycle" title="Vendors" description="Hardware and support contacts on this tenant." />
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {rows.map((v) => (
-          <div key={v.id} className="ops-panel rounded-2xl p-4">
+          <Link key={v.id} href={`/lifecycle/vendors/${v.id}`} className="ops-panel rounded-2xl p-4 hover:border-coral/40">
             <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-coral">{v.category}</p>
             <h2 className="font-display mt-1 text-lg font-semibold">{v.name}</h2>
             <p className="mt-2 font-mono text-xs text-muted">{v.support_email || "no support mailbox"}</p>
-          </div>
+            <p className="mt-1 text-xs text-muted">{v.asset_count ?? 0} catalogued assets</p>
+          </Link>
         ))}
       </div>
       {rows.length === 0 ? <EmptyState label="No vendors catalogued." /> : null}
@@ -696,11 +822,27 @@ export function WarrantyBoard() {
   const { data: rows = [] } = useItems<Warranty>("/api/v1/warranties");
   return (
     <div>
-      <PageHeader eyebrow="Lifecycle" title="Warranties" description="Coverage windows attached to CMDB assets." />
+      <PageHeader eyebrow="Lifecycle" title="Warranties" description="Coverage windows attached to named CMDB assets." />
       <Panel>
         <DataTable
           rows={rows}
           columns={[
+            {
+              key: "asset",
+              label: "Asset",
+              render: (r) =>
+                r.asset ? (
+                  <Link className="font-medium text-coral hover:underline" href={`/lifecycle/warranty/${r.id}`}>
+                    {r.asset.name}
+                  </Link>
+                ) : (
+                  <Link className="text-coral hover:underline" href={`/lifecycle/warranty/${r.id}`}>
+                    Warranty
+                  </Link>
+                ),
+            },
+            { key: "serial", label: "Type", render: (r) => r.asset?.asset_type || "—" },
+            { key: "vendor", label: "Vendor", render: (r) => r.vendor?.name || "—" },
             { key: "coverage", label: "Coverage", render: (r) => <StatusChip value={r.coverage} /> },
             { key: "start_date", label: "Start", render: (r) => dash(r.start_date) },
             { key: "end_date", label: "End", render: (r) => dash(r.end_date) },
@@ -720,7 +862,16 @@ export function ContractsBoard() {
         <DataTable
           rows={rows}
           columns={[
-            { key: "name", label: "Contract" },
+            {
+              key: "name",
+              label: "Contract",
+              render: (r) => (
+                <Link className="font-medium text-coral hover:underline" href={`/lifecycle/contracts/${r.id}`}>
+                  {r.name}
+                </Link>
+              ),
+            },
+            { key: "vendor", label: "Vendor", render: (r) => r.vendor?.name || "—" },
             { key: "contract_type", label: "Type", render: (r) => <span className="font-mono text-xs">{r.contract_type}</span> },
             {
               key: "value",
@@ -742,11 +893,12 @@ export function LicensesBoard() {
       <PageHeader eyebrow="Lifecycle" title="Licenses" description="Seat and expiry tracking for software entitlements." />
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {rows.map((l) => (
-          <div key={l.id} className="ops-panel rounded-2xl p-4">
+          <Link key={l.id} href={`/lifecycle/licenses/${l.id}`} className="ops-panel rounded-2xl p-4 hover:border-coral/40">
             <h2 className="font-display text-lg font-semibold">{l.name}</h2>
+            <p className="mt-1 text-xs text-muted">{l.vendor?.name || "unassigned vendor"}</p>
             {l.seats != null ? <Meter label="Seats" used={l.used ?? 0} max={l.seats} unit="" /> : <p className="mt-2 text-sm text-muted">No seat cap</p>}
             <p className="mt-2 text-xs text-muted">Expires {dash(l.expiry)}</p>
-          </div>
+          </Link>
         ))}
       </div>
       {rows.length === 0 ? <EmptyState label="No licenses on this tenant." /> : null}
