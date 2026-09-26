@@ -89,8 +89,12 @@ def enrich_demo_rack_identity(db: Session) -> None:
         return
 
     vlan_mgmt = db.query(Vlan).filter(Vlan.tenant_id == tenant_id, Vlan.vlan_id == 10).one_or_none()
-    sn_gpu = db.query(Subnet).filter(Subnet.tenant_id == tenant_id, Subnet.cidr == "10.42.10.0/24").one_or_none()
-    sn_oob = db.query(Subnet).filter(Subnet.tenant_id == tenant_id, Subnet.cidr == "10.42.1.0/24").one_or_none()
+    sn_gpu = (
+        db.query(Subnet).filter(Subnet.tenant_id == tenant_id, Subnet.cidr == "10.42.10.0/24").one_or_none()
+    )
+    sn_oob = (
+        db.query(Subnet).filter(Subnet.tenant_id == tenant_id, Subnet.cidr == "10.42.1.0/24").one_or_none()
+    )
     if sn_oob is None and vlan_mgmt is not None:
         sn_oob = Subnet(
             id=_id(),
@@ -165,10 +169,16 @@ def enrich_demo_rack_identity(db: Session) -> None:
         )
 
     for i in range(1, 5):
-        node = db.query(Asset).filter(Asset.tenant_id == tenant_id, Asset.name == f"gpu-node-{i:02d}").one_or_none()
+        node = (
+            db.query(Asset)
+            .filter(Asset.tenant_id == tenant_id, Asset.name == f"gpu-node-{i:02d}")
+            .one_or_none()
+        )
         if node is None:
             continue
-        _bind_ip(db, tenant_id, node, node.management_ip or "", sn_gpu.id if sn_gpu else None, "bmc", node.fqdn)
+        _bind_ip(
+            db, tenant_id, node, node.management_ip or "", sn_gpu.id if sn_gpu else None, "bmc", node.fqdn
+        )
         _bind_ip(
             db,
             tenant_id,
@@ -241,12 +251,13 @@ def seed(db: Session, *, reset: bool = False) -> dict:
         ),
     }
     existing_emails = {
-        email
-        for (email,) in db.query(User.email).filter(User.email.in_([u.email for u in users.values()]))
+        email for (email,) in db.query(User.email).filter(User.email.in_([u.email for u in users.values()]))
     }
     db.add_all([user for user in users.values() if user.email not in existing_emails])
 
-    nvidia = Vendor(id=_id(), tenant_id=tenant_id, name="NVIDIA", category="gpu", support_email="enterprise@nvidia.com")
+    nvidia = Vendor(
+        id=_id(), tenant_id=tenant_id, name="NVIDIA", category="gpu", support_email="enterprise@nvidia.com"
+    )
     dell = Vendor(id=_id(), tenant_id=tenant_id, name="Dell", category="server")
     supermicro = Vendor(id=_id(), tenant_id=tenant_id, name="Supermicro", category="server")
     arista = Vendor(id=_id(), tenant_id=tenant_id, name="Arista", category="network")
@@ -406,9 +417,15 @@ def seed(db: Session, *, reset: bool = False) -> dict:
         )
 
     rack_assets = {
-        r42: asset(name="R42", asset_type="rack", rack_id=r42.id, room_id=gpu_hall.id, manufacturer="Chatsworth"),
-        r10: asset(name="R10", asset_type="rack", rack_id=r10.id, room_id=gpu_hall.id, manufacturer="Chatsworth"),
-        r01: asset(name="R01", asset_type="rack", rack_id=r01.id, room_id=net_room.id, manufacturer="Chatsworth"),
+        r42: asset(
+            name="R42", asset_type="rack", rack_id=r42.id, room_id=gpu_hall.id, manufacturer="Chatsworth"
+        ),
+        r10: asset(
+            name="R10", asset_type="rack", rack_id=r10.id, room_id=gpu_hall.id, manufacturer="Chatsworth"
+        ),
+        r01: asset(
+            name="R01", asset_type="rack", rack_id=r01.id, room_id=net_room.id, manufacturer="Chatsworth"
+        ),
     }
 
     ups = asset(
@@ -425,7 +442,9 @@ def seed(db: Session, *, reset: bool = False) -> dict:
     attr(ups, "battery_health", 92, "%")
     sample(ups, "infraasset_ups_load_percent", 68, "percent")
 
-    gen = asset(name="GEN-01", asset_type="generator", manufacturer="Caterpillar", model="C32", criticality="critical")
+    gen = asset(
+        name="GEN-01", asset_type="generator", manufacturer="Caterpillar", model="C32", criticality="critical"
+    )
     pdu_a = asset(
         name="PDU-R42-A",
         hostname="pdu-r42-a",
@@ -481,7 +500,9 @@ def seed(db: Session, *, reset: bool = False) -> dict:
     sample(cdu, "infraasset_coolant_flow_lpm", 118, "lpm")
     sample(cdu, "infraasset_cdu_load_percent", 88, "percent")
 
-    pump = asset(name="PUMP-CDU03-1", asset_type="pump", room_id=gpu_hall.id, health="degraded", status="warning")
+    pump = asset(
+        name="PUMP-CDU03-1", asset_type="pump", room_id=gpu_hall.id, health="degraded", status="warning"
+    )
     hx = asset(name="HX-03", asset_type="heat_exchanger", room_id=gpu_hall.id)
     chiller = asset(name="CHILLER-2", asset_type="chiller", manufacturer="Trane", criticality="critical")
     manifold = asset(name="MANIFOLD-R42", asset_type="rack_manifold", rack_id=r42.id, room_id=gpu_hall.id)
@@ -562,7 +583,13 @@ def seed(db: Session, *, reset: bool = False) -> dict:
         health="degraded",
         status="warning",
     )
-    nas = asset(name="CEPH-OSD-01", asset_type="storage", asset_subtype="ceph", manufacturer="Western Digital", rack_id=r10.id)
+    nas = asset(
+        name="CEPH-OSD-01",
+        asset_type="storage",
+        asset_subtype="ceph",
+        manufacturer="Western Digital",
+        rack_id=r10.id,
+    )
 
     gpu_nodes: list[Asset] = []
     gpus: list[Asset] = []
@@ -694,7 +721,7 @@ def seed(db: Session, *, reset: bool = False) -> dict:
     vm = asset(name="vcenter-prod", asset_type="hypervisor", asset_subtype="vmware", manufacturer="VMware")
     guest = asset(name="jump-01", asset_type="vm", hostname="jump-01")
     rel(guest, vm, "RUNS_ON")
-    prox = asset(name="pve-01", asset_type="hypervisor", asset_subtype="proxmox")
+    asset(name="pve-01", asset_type="hypervisor", asset_subtype="proxmox")
 
     rel(manifold, cdu, "COOLED_BY")
     rel(cdu, pump, "DEPENDS_ON")
@@ -710,21 +737,60 @@ def seed(db: Session, *, reset: bool = False) -> dict:
     rel(ups, gen, "POWERED_BY")
     rel(rack_assets[r42], cdu, "COOLED_BY")
 
-    lan = Network(id=_id(), tenant_id=tenant_id, name="CHN-DC1 Fabric", network_type="ai_fabric", site_id=site.id)
+    lan = Network(
+        id=_id(), tenant_id=tenant_id, name="CHN-DC1 Fabric", network_type="ai_fabric", site_id=site.id
+    )
     db.add(lan)
     db.flush()
     vlan_mgmt = Vlan(id=_id(), tenant_id=tenant_id, network_id=lan.id, vlan_id=10, name="mgmt", purpose="OOB")
-    vlan_gpu = Vlan(id=_id(), tenant_id=tenant_id, network_id=lan.id, vlan_id=100, name="gpu-data", purpose="RoCEv2")
+    vlan_gpu = Vlan(
+        id=_id(), tenant_id=tenant_id, network_id=lan.id, vlan_id=100, name="gpu-data", purpose="RoCEv2"
+    )
     db.add_all([vlan_mgmt, vlan_gpu])
     db.flush()
-    sn_mgmt = Subnet(id=_id(), tenant_id=tenant_id, vlan_id=vlan_mgmt.id, site_id=site.id, cidr="10.42.0.0/24", gateway="10.42.0.1", purpose="mgmt", utilization_percent=22)
-    sn_oob = Subnet(id=_id(), tenant_id=tenant_id, vlan_id=vlan_mgmt.id, site_id=site.id, cidr="10.42.1.0/24", gateway="10.42.1.1", purpose="oob", utilization_percent=18)
-    sn_gpu = Subnet(id=_id(), tenant_id=tenant_id, vlan_id=vlan_gpu.id, site_id=site.id, cidr="10.42.10.0/24", gateway="10.42.10.1", purpose="gpu", utilization_percent=41)
+    sn_mgmt = Subnet(
+        id=_id(),
+        tenant_id=tenant_id,
+        vlan_id=vlan_mgmt.id,
+        site_id=site.id,
+        cidr="10.42.0.0/24",
+        gateway="10.42.0.1",
+        purpose="mgmt",
+        utilization_percent=22,
+    )
+    sn_oob = Subnet(
+        id=_id(),
+        tenant_id=tenant_id,
+        vlan_id=vlan_mgmt.id,
+        site_id=site.id,
+        cidr="10.42.1.0/24",
+        gateway="10.42.1.1",
+        purpose="oob",
+        utilization_percent=18,
+    )
+    sn_gpu = Subnet(
+        id=_id(),
+        tenant_id=tenant_id,
+        vlan_id=vlan_gpu.id,
+        site_id=site.id,
+        cidr="10.42.10.0/24",
+        gateway="10.42.10.1",
+        purpose="gpu",
+        utilization_percent=41,
+    )
     db.add_all([sn_mgmt, sn_oob, sn_gpu])
     db.flush()
     for i, node in enumerate(gpu_nodes, start=1):
         _bind_ip(db, tenant_id, node, node.management_ip or "", sn_gpu.id, "bmc", node.fqdn)
-        _bind_ip(db, tenant_id, node, f"10.42.10.{100 + i}", sn_gpu.id, "roce", f"{node.hostname}-data.chn.wecrew.in")
+        _bind_ip(
+            db,
+            tenant_id,
+            node,
+            f"10.42.10.{100 + i}",
+            sn_gpu.id,
+            "roce",
+            f"{node.hostname}-data.chn.wecrew.in",
+        )
     for device, subnet in (
         (tor, sn_oob),
         (ib, sn_oob),
@@ -735,17 +801,66 @@ def seed(db: Session, *, reset: bool = False) -> dict:
     ):
         _bind_ip(db, tenant_id, device, device.management_ip or "", subnet.id, "mgmt", device.fqdn)
 
-    aws = CloudAccount(id=_id(), tenant_id=tenant_id, provider="aws", name="WeCrew Prod", account_id="111122223333", vault_path="secret/cloud/aws/prod")
-    azure = CloudAccount(id=_id(), tenant_id=tenant_id, provider="azure", name="WeCrew Corp", account_id="sub-9aa1")
-    gcp = CloudAccount(id=_id(), tenant_id=tenant_id, provider="gcp", name="WeCrew Analytics", account_id="wecrew-analytics")
+    aws = CloudAccount(
+        id=_id(),
+        tenant_id=tenant_id,
+        provider="aws",
+        name="WeCrew Prod",
+        account_id="111122223333",
+        vault_path="secret/cloud/aws/prod",
+    )
+    azure = CloudAccount(
+        id=_id(), tenant_id=tenant_id, provider="azure", name="WeCrew Corp", account_id="sub-9aa1"
+    )
+    gcp = CloudAccount(
+        id=_id(), tenant_id=tenant_id, provider="gcp", name="WeCrew Analytics", account_id="wecrew-analytics"
+    )
     db.add_all([aws, azure, gcp])
     db.flush()
-    eks = CloudResource(id=_id(), tenant_id=tenant_id, account_id=aws.id, provider="aws", resource_type="eks", name="prod-eks", region="ap-south-1", native_id="arn:aws:eks:ap-south-1:111122223333:cluster/prod-eks")
-    dx = CloudResource(id=_id(), tenant_id=tenant_id, account_id=aws.id, provider="aws", resource_type="direct_connect", name="CHN-DX", region="ap-south-1", native_id="dxcon-abc")
-    s3 = CloudResource(id=_id(), tenant_id=tenant_id, account_id=aws.id, provider="aws", resource_type="s3", name="wecrew-checkpoints", region="ap-south-1", native_id="wecrew-checkpoints")
+    eks = CloudResource(
+        id=_id(),
+        tenant_id=tenant_id,
+        account_id=aws.id,
+        provider="aws",
+        resource_type="eks",
+        name="prod-eks",
+        region="ap-south-1",
+        native_id="arn:aws:eks:ap-south-1:111122223333:cluster/prod-eks",
+    )
+    dx = CloudResource(
+        id=_id(),
+        tenant_id=tenant_id,
+        account_id=aws.id,
+        provider="aws",
+        resource_type="direct_connect",
+        name="CHN-DX",
+        region="ap-south-1",
+        native_id="dxcon-abc",
+    )
+    s3 = CloudResource(
+        id=_id(),
+        tenant_id=tenant_id,
+        account_id=aws.id,
+        provider="aws",
+        resource_type="s3",
+        name="wecrew-checkpoints",
+        region="ap-south-1",
+        native_id="wecrew-checkpoints",
+    )
     db.add_all([eks, dx, s3])
-    eks_asset = asset(name="prod-eks", asset_type="cloud_resource", asset_subtype="eks", site_id=None, business_service="Hybrid Inference")
-    dx_asset = asset(name="CHN-DX", asset_type="cloud_resource", asset_subtype="direct_connect", business_service="Hybrid Connectivity")
+    eks_asset = asset(
+        name="prod-eks",
+        asset_type="cloud_resource",
+        asset_subtype="eks",
+        site_id=None,
+        business_service="Hybrid Inference",
+    )
+    dx_asset = asset(
+        name="CHN-DX",
+        asset_type="cloud_resource",
+        asset_subtype="direct_connect",
+        business_service="Hybrid Connectivity",
+    )
     eks.asset_id = eks_asset.id
     dx.asset_id = dx_asset.id
     rel(eks_asset, dx_asset, "CONNECTED_TO")
@@ -821,9 +936,40 @@ def seed(db: Session, *, reset: bool = False) -> dict:
         )
     )
 
-    db.add(Warranty(id=_id(), tenant_id=tenant_id, asset_id=gpu_nodes[2].id, vendor_id=supermicro.id, start_date=TODAY - timedelta(days=400), end_date=TODAY + timedelta(days=18), coverage="4H"))
-    db.add(Contract(id=_id(), tenant_id=tenant_id, vendor_id=vertiv.id, name="CDU AMC 2026", contract_type="AMC", start_date=TODAY - timedelta(days=90), end_date=TODAY + timedelta(days=275), value=84000))
-    db.add(License(id=_id(), tenant_id=tenant_id, name="VMware vSphere", vendor_id=dell.id, seats=32, used=18, expiry=TODAY + timedelta(days=120)))
+    db.add(
+        Warranty(
+            id=_id(),
+            tenant_id=tenant_id,
+            asset_id=gpu_nodes[2].id,
+            vendor_id=supermicro.id,
+            start_date=TODAY - timedelta(days=400),
+            end_date=TODAY + timedelta(days=18),
+            coverage="4H",
+        )
+    )
+    db.add(
+        Contract(
+            id=_id(),
+            tenant_id=tenant_id,
+            vendor_id=vertiv.id,
+            name="CDU AMC 2026",
+            contract_type="AMC",
+            start_date=TODAY - timedelta(days=90),
+            end_date=TODAY + timedelta(days=275),
+            value=84000,
+        )
+    )
+    db.add(
+        License(
+            id=_id(),
+            tenant_id=tenant_id,
+            name="VMware vSphere",
+            vendor_id=dell.id,
+            seats=32,
+            used=18,
+            expiry=TODAY + timedelta(days=120),
+        )
+    )
 
     db.add(
         Prediction(
@@ -833,7 +979,10 @@ def seed(db: Session, *, reset: bool = False) -> dict:
             prediction_type="cdu_pump_degradation",
             summary="Pump speed has been above 88% for 14 days while flow declined 21%.",
             confidence="likely",
-            evidence="coolant_flow_lpm=118 (design 160); cdu_pump_speed_percent=91; GPU thermal throttle on gpu-node-02",
+            evidence=(
+                "coolant_flow_lpm=118 (design 160); cdu_pump_speed_percent=91; "
+                "GPU thermal throttle on gpu-node-02"
+            ),
             horizon_days=14,
         )
     )

@@ -58,7 +58,16 @@ RELATIONSHIP_TYPES = [
     "MONITORED_BY",
 ]
 
-ASSET_STATUSES = ["online", "offline", "warning", "critical", "maintenance", "unknown", "stale", "decommissioned"]
+ASSET_STATUSES = [
+    "online",
+    "offline",
+    "warning",
+    "critical",
+    "maintenance",
+    "unknown",
+    "stale",
+    "decommissioned",
+]
 ENVIRONMENTS = ["production", "uat", "development", "dr", "lab"]
 CRITICALITY = ["critical", "high", "medium", "low"]
 HEALTH = ["healthy", "degraded", "unhealthy", "unknown"]

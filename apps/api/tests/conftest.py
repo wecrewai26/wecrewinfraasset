@@ -1,5 +1,5 @@
-from collections.abc import Generator
 import os
+from collections.abc import Generator
 
 os.environ.setdefault("DEMO_SEED", "false")
 os.environ.setdefault("APP_ENV", "test")

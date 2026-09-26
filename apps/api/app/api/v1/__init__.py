@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import admin, auth, assets, discovery, overview, platform
+from app.api.v1 import admin, assets, auth, discovery, overview, platform
 
 api_router = APIRouter()
 api_router.include_router(auth.router)

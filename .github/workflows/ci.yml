@@ -11,11 +11,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Test API
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: pip install -e ".[dev]"
+      - name: Lint API
         working-directory: apps/api
         run: |
-          pip install -e ".[dev]"
-          pytest -q
+          ruff check app tests
+          ruff format --check app tests
+      - name: Test API
+        working-directory: apps/api
+        run: pytest -q
   web:
     runs-on: ubuntu-latest
     steps:

@@ -35,7 +35,9 @@ def relationships(
     ids = {r.source_id for r in rows} | {r.target_id for r in rows}
     assets = {
         a.id: a
-        for a in db.query(Asset).filter(Asset.tenant_id == principal.tenant_id, Asset.id.in_(ids or ["-"])).all()
+        for a in db.query(Asset)
+        .filter(Asset.tenant_id == principal.tenant_id, Asset.id.in_(ids or ["-"]))
+        .all()
     }
 
     def ref(aid: str) -> dict:
@@ -97,7 +99,11 @@ def kpis(
         .filter(Alert.tenant_id == tid, Alert.status == "open", Alert.severity.in_(["critical", "high"]))
         .scalar()
     )
-    incidents = db.query(func.count(Incident.id)).filter(Incident.tenant_id == tid, Incident.status != "resolved").scalar()
+    incidents = (
+        db.query(func.count(Incident.id))
+        .filter(Incident.tenant_id == tid, Incident.status != "resolved")
+        .scalar()
+    )
     dist = (
         db.query(Asset.asset_type, func.count(Asset.id))
         .filter(Asset.tenant_id == tid)
@@ -119,9 +125,13 @@ def kpis(
         "critical_alerts": int(alerts or 0),
         "open_incidents": int(incidents or 0),
         "unhealthy_assets": unhealthy,
-        "capacity_risks": sum(1 for r in racks if (r.power_capacity_kw - r.power_used_kw) / max(r.power_capacity_kw, 0.01) < 0.2),
+        "capacity_risks": sum(
+            1 for r in racks if (r.power_capacity_kw - r.power_used_kw) / max(r.power_capacity_kw, 0.01) < 0.2
+        ),
         "asset_distribution": [{"type": t, "count": c} for t, c in dist],
-        "sites": [{"id": s.id, "name": s.name, "code": s.code, "city": s.city, "status": s.status} for s in sites],
+        "sites": [
+            {"id": s.id, "name": s.name, "code": s.code, "city": s.city, "status": s.status} for s in sites
+        ],
         "racks": [
             {
                 "id": r.id,

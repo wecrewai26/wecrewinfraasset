@@ -11,10 +11,10 @@ from app.models.cmdb import Relationship
 from app.models.datacenter import Building, Rack, Room, Row, Site
 from app.models.network import DnsRecord, IpAddress, Network, Subnet, Vlan
 from app.models.ops import Alert, Change, Incident, Maintenance
+from app.schemas.common import AskRequest, CapacityAdviseRequest, SimulateRequest
 from app.services.capacity import advise_gpu_server_placement, capacity_overview, rack_capacity
 from app.services.copilot import ask, latest_metrics
 from app.services.graph import blast_radius
-from app.schemas.common import AskRequest, CapacityAdviseRequest, SimulateRequest
 
 dc_router = APIRouter(tags=["data-center"])
 intel_router = APIRouter(tags=["intelligence"])
@@ -43,13 +43,17 @@ def _with_asset(db: Session, row) -> dict:
 
 
 @dc_router.get("/data-centers")
-def data_centers(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def data_centers(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     sites = db.query(Site).filter(Site.tenant_id == principal.tenant_id).all()
     return {"items": [_dump(s) for s in sites]}
 
 
 @dc_router.get("/racks")
-def racks(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def racks(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     rows = db.query(Rack).filter(Rack.tenant_id == principal.tenant_id).all()
     return {"items": [{**_dump(r), **rack_capacity(db, principal.tenant_id, r)} for r in rows]}
 
@@ -108,9 +112,7 @@ def rack_detail(
     asset_ids = [a.id for a in assets]
     ips = db.query(IpAddress).filter(IpAddress.asset_id.in_(asset_ids or ["-"])).all()
     subnet_ids = {ip.subnet_id for ip in ips if ip.subnet_id}
-    subnets = {
-        s.id: s for s in db.query(Subnet).filter(Subnet.id.in_(subnet_ids or ["-"])).all()
-    }
+    subnets = {s.id: s for s in db.query(Subnet).filter(Subnet.id.in_(subnet_ids or ["-"])).all()}
     vlan_ids = {s.vlan_id for s in subnets.values() if s.vlan_id}
     vlans = {v.id: v for v in db.query(Vlan).filter(Vlan.id.in_(vlan_ids or ["-"])).all()}
     ips_by_asset: dict[str, list[dict]] = defaultdict(list)
@@ -208,7 +210,9 @@ def site_tree(
 
 
 @dc_router.get("/gpu")
-def gpu_fleet(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def gpu_fleet(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     gpus = db.query(Asset).filter(Asset.tenant_id == principal.tenant_id, Asset.asset_type == "gpu").all()
     attrs = db.query(AssetAttribute).filter(AssetAttribute.asset_id.in_([g.id for g in gpus] or ["-"])).all()
     by_asset: dict[str, dict] = {}
@@ -254,22 +258,30 @@ def gpu_health(
 
 
 @dc_router.get("/power")
-def power(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def power(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     types = ["ups", "pdu", "generator", "ats", "transformer"]
     assets = db.query(Asset).filter(Asset.tenant_id == principal.tenant_id, Asset.asset_type.in_(types)).all()
     return {"items": [_asset_with_attrs(db, a) for a in assets]}
 
 
 @dc_router.get("/cooling")
-def cooling(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def cooling(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     types = ["cdu", "pump", "chiller", "heat_exchanger", "cold_plate", "rack_manifold", "crac", "crah"]
     assets = db.query(Asset).filter(Asset.tenant_id == principal.tenant_id, Asset.asset_type.in_(types)).all()
     return {"items": [_asset_with_attrs(db, a) for a in assets]}
 
 
 @dc_router.get("/storage")
-def storage(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
-    assets = db.query(Asset).filter(Asset.tenant_id == principal.tenant_id, Asset.asset_type == "storage").all()
+def storage(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
+    assets = (
+        db.query(Asset).filter(Asset.tenant_id == principal.tenant_id, Asset.asset_type == "storage").all()
+    )
     return {"items": [_asset_with_attrs(db, a) for a in assets]}
 
 
@@ -294,7 +306,9 @@ def _asset_with_attrs(db: Session, asset: Asset) -> dict:
 
 
 @intel_router.get("/capacity")
-def capacity(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def capacity(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     return {"items": capacity_overview(db, principal.tenant_id)}
 
 
@@ -381,12 +395,20 @@ def root_cause(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(get_current_user)],
 ):
-    return ask(db, principal.tenant_id, body.question if "why" in body.question.lower() else f"why is {body.question}")
+    return ask(
+        db,
+        principal.tenant_id,
+        body.question if "why" in body.question.lower() else f"why is {body.question}",
+    )
 
 
 @ops_router.get("/alerts")
-def alerts(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
-    rows = db.query(Alert).filter(Alert.tenant_id == principal.tenant_id).order_by(Alert.fired_at.desc()).all()
+def alerts(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
+    rows = (
+        db.query(Alert).filter(Alert.tenant_id == principal.tenant_id).order_by(Alert.fired_at.desc()).all()
+    )
     return {"items": [_with_asset(db, r) for r in rows]}
 
 
@@ -404,7 +426,9 @@ def alert_detail(
     if row.asset_id:
         siblings = (
             db.query(Alert)
-            .filter(Alert.tenant_id == principal.tenant_id, Alert.asset_id == row.asset_id, Alert.id != row.id)
+            .filter(
+                Alert.tenant_id == principal.tenant_id, Alert.asset_id == row.asset_id, Alert.id != row.id
+            )
             .order_by(Alert.fired_at.desc())
             .limit(8)
             .all()
@@ -414,7 +438,9 @@ def alert_detail(
 
 
 @ops_router.get("/incidents")
-def incidents(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def incidents(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     rows = db.query(Incident).filter(Incident.tenant_id == principal.tenant_id).all()
     return {"items": [_dump(r) for r in rows]}
 
@@ -425,7 +451,11 @@ def incident_detail(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(get_current_user)],
 ):
-    row = db.query(Incident).filter(Incident.id == incident_id, Incident.tenant_id == principal.tenant_id).one_or_none()
+    row = (
+        db.query(Incident)
+        .filter(Incident.id == incident_id, Incident.tenant_id == principal.tenant_id)
+        .one_or_none()
+    )
     if row is None:
         raise HTTPException(404, "Incident not found")
     assets = []
@@ -451,7 +481,9 @@ def incident_detail(
 
 
 @ops_router.get("/changes")
-def changes(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def changes(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     rows = db.query(Change).filter(Change.tenant_id == principal.tenant_id).all()
     return {"items": [_with_asset(db, r) for r in rows]}
 
@@ -462,14 +494,18 @@ def change_detail(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(get_current_user)],
 ):
-    row = db.query(Change).filter(Change.id == change_id, Change.tenant_id == principal.tenant_id).one_or_none()
+    row = (
+        db.query(Change).filter(Change.id == change_id, Change.tenant_id == principal.tenant_id).one_or_none()
+    )
     if row is None:
         raise HTTPException(404, "Change not found")
     return _with_asset(db, row)
 
 
 @ops_router.get("/maintenance")
-def maintenance(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def maintenance(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     rows = db.query(Maintenance).filter(Maintenance.tenant_id == principal.tenant_id).all()
     return {"items": [_with_asset(db, r) for r in rows]}
 
@@ -480,39 +516,65 @@ def maintenance_detail(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(get_current_user)],
 ):
-    row = db.query(Maintenance).filter(Maintenance.id == maint_id, Maintenance.tenant_id == principal.tenant_id).one_or_none()
+    row = (
+        db.query(Maintenance)
+        .filter(Maintenance.id == maint_id, Maintenance.tenant_id == principal.tenant_id)
+        .one_or_none()
+    )
     if row is None:
         raise HTTPException(404, "Maintenance not found")
     return _with_asset(db, row)
 
 
 @net_router.get("/subnets")
-def subnets(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
-    return {"items": [_dump(r) for r in db.query(Subnet).filter(Subnet.tenant_id == principal.tenant_id).all()]}
+def subnets(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
+    return {
+        "items": [_dump(r) for r in db.query(Subnet).filter(Subnet.tenant_id == principal.tenant_id).all()]
+    }
 
 
 @net_router.get("/vlans")
-def vlans(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def vlans(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     return {"items": [_dump(r) for r in db.query(Vlan).filter(Vlan.tenant_id == principal.tenant_id).all()]}
 
 
 @net_router.get("/addresses")
-def addresses(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
-    return {"items": [_dump(r) for r in db.query(IpAddress).filter(IpAddress.tenant_id == principal.tenant_id).all()]}
+def addresses(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
+    return {
+        "items": [
+            _dump(r) for r in db.query(IpAddress).filter(IpAddress.tenant_id == principal.tenant_id).all()
+        ]
+    }
 
 
 @net_router.get("/dns")
 def dns(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
-    return {"items": [_dump(r) for r in db.query(DnsRecord).filter(DnsRecord.tenant_id == principal.tenant_id).all()]}
+    return {
+        "items": [
+            _dump(r) for r in db.query(DnsRecord).filter(DnsRecord.tenant_id == principal.tenant_id).all()
+        ]
+    }
 
 
 @net_router.get("/networks")
-def networks(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
-    return {"items": [_dump(r) for r in db.query(Network).filter(Network.tenant_id == principal.tenant_id).all()]}
+def networks(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
+    return {
+        "items": [_dump(r) for r in db.query(Network).filter(Network.tenant_id == principal.tenant_id).all()]
+    }
 
 
 @cloud_router.get("/accounts")
-def cloud_accounts(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def cloud_accounts(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     from app.models.cloud import CloudAccount, CloudResource
 
     accounts = db.query(CloudAccount).filter(CloudAccount.tenant_id == principal.tenant_id).all()
