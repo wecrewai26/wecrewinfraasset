@@ -4,7 +4,9 @@ from tests.conftest import auth
 
 
 def test_login_success(client: TestClient) -> None:
-    response = client.post("/api/v1/auth/login", json={"email": "admin@wecrew.in", "password": "WeCrew!admin"})
+    response = client.post(
+        "/api/v1/auth/login", json={"email": "admin@wecrew.in", "password": "WeCrew!admin"}
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["role"] == "super_admin"
@@ -84,7 +86,9 @@ def test_capacity_advisor_r42_fails_for_full_node(client: TestClient) -> None:
 
 def test_copilot_throttling(client: TestClient) -> None:
     headers = auth(client)
-    body = client.post("/api/v1/ai/ask", json={"question": "Which GPUs are throttling?"}, headers=headers).json()
+    body = client.post(
+        "/api/v1/ai/ask", json={"question": "Which GPUs are throttling?"}, headers=headers
+    ).json()
     assert "gpu-node-02" in body["answer"]
     assert body["evidence"]
 

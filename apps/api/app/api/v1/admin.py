@@ -102,16 +102,16 @@ def credentials(
 
 
 @admin_router.get("/vendors")
-def vendors(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def vendors(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     rows = db.query(Vendor).filter(Vendor.tenant_id == principal.tenant_id).all()
     assets = db.query(Asset).filter(Asset.tenant_id == principal.tenant_id, Asset.vendor_id.isnot(None)).all()
     count_by_vendor: dict[str, int] = {}
     for asset in assets:
         if asset.vendor_id:
             count_by_vendor[asset.vendor_id] = count_by_vendor.get(asset.vendor_id, 0) + 1
-    return {
-        "items": [{**_dump(r), "asset_count": count_by_vendor.get(r.id, 0)} for r in rows]
-    }
+    return {"items": [{**_dump(r), "asset_count": count_by_vendor.get(r.id, 0)} for r in rows]}
 
 
 @admin_router.get("/vendors/{vendor_id}")
@@ -120,7 +120,9 @@ def vendor_detail(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(get_current_user)],
 ):
-    row = db.query(Vendor).filter(Vendor.id == vendor_id, Vendor.tenant_id == principal.tenant_id).one_or_none()
+    row = (
+        db.query(Vendor).filter(Vendor.id == vendor_id, Vendor.tenant_id == principal.tenant_id).one_or_none()
+    )
     if row is None:
         raise HTTPException(404, "Vendor not found")
     assets = (
@@ -129,9 +131,19 @@ def vendor_detail(
         .order_by(Asset.name)
         .all()
     )
-    warranties = db.query(Warranty).filter(Warranty.tenant_id == principal.tenant_id, Warranty.vendor_id == row.id).all()
-    contracts = db.query(Contract).filter(Contract.tenant_id == principal.tenant_id, Contract.vendor_id == row.id).all()
-    licenses = db.query(License).filter(License.tenant_id == principal.tenant_id, License.vendor_id == row.id).all()
+    warranties = (
+        db.query(Warranty)
+        .filter(Warranty.tenant_id == principal.tenant_id, Warranty.vendor_id == row.id)
+        .all()
+    )
+    contracts = (
+        db.query(Contract)
+        .filter(Contract.tenant_id == principal.tenant_id, Contract.vendor_id == row.id)
+        .all()
+    )
+    licenses = (
+        db.query(License).filter(License.tenant_id == principal.tenant_id, License.vendor_id == row.id).all()
+    )
     return {
         **_dump(row),
         "assets": [_asset_ref(db, a.id) for a in assets],
@@ -142,7 +154,9 @@ def vendor_detail(
 
 
 @admin_router.get("/contracts")
-def contracts(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def contracts(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     rows = db.query(Contract).filter(Contract.tenant_id == principal.tenant_id).all()
     return {"items": [_contract_payload(db, r) for r in rows]}
 
@@ -153,14 +167,20 @@ def contract_detail(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(get_current_user)],
 ):
-    row = db.query(Contract).filter(Contract.id == contract_id, Contract.tenant_id == principal.tenant_id).one_or_none()
+    row = (
+        db.query(Contract)
+        .filter(Contract.id == contract_id, Contract.tenant_id == principal.tenant_id)
+        .one_or_none()
+    )
     if row is None:
         raise HTTPException(404, "Contract not found")
     return _contract_payload(db, row)
 
 
 @admin_router.get("/warranties")
-def warranties(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def warranties(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     rows = db.query(Warranty).filter(Warranty.tenant_id == principal.tenant_id).all()
     return {"items": [_warranty_payload(db, r) for r in rows]}
 
@@ -171,14 +191,20 @@ def warranty_detail(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(get_current_user)],
 ):
-    row = db.query(Warranty).filter(Warranty.id == warranty_id, Warranty.tenant_id == principal.tenant_id).one_or_none()
+    row = (
+        db.query(Warranty)
+        .filter(Warranty.id == warranty_id, Warranty.tenant_id == principal.tenant_id)
+        .one_or_none()
+    )
     if row is None:
         raise HTTPException(404, "Warranty not found")
     return _warranty_payload(db, row)
 
 
 @admin_router.get("/licenses")
-def licenses(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
+def licenses(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
     rows = db.query(License).filter(License.tenant_id == principal.tenant_id).all()
     return {"items": [_license_payload(db, r) for r in rows]}
 
@@ -189,17 +215,34 @@ def license_detail(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(get_current_user)],
 ):
-    row = db.query(License).filter(License.id == license_id, License.tenant_id == principal.tenant_id).one_or_none()
+    row = (
+        db.query(License)
+        .filter(License.id == license_id, License.tenant_id == principal.tenant_id)
+        .one_or_none()
+    )
     if row is None:
         raise HTTPException(404, "License not found")
     return _license_payload(db, row)
 
 
 @admin_router.get("/predictions")
-def predictions(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
-    return {"items": [_dump(r) for r in db.query(Prediction).filter(Prediction.tenant_id == principal.tenant_id).all()]}
+def predictions(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
+    return {
+        "items": [
+            _dump(r) for r in db.query(Prediction).filter(Prediction.tenant_id == principal.tenant_id).all()
+        ]
+    }
 
 
 @admin_router.get("/recommendations")
-def recommendations(db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]):
-    return {"items": [_dump(r) for r in db.query(Recommendation).filter(Recommendation.tenant_id == principal.tenant_id).all()]}
+def recommendations(
+    db: Annotated[Session, Depends(get_db)], principal: Annotated[Principal, Depends(get_current_user)]
+):
+    return {
+        "items": [
+            _dump(r)
+            for r in db.query(Recommendation).filter(Recommendation.tenant_id == principal.tenant_id).all()
+        ]
+    }

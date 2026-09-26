@@ -51,11 +51,7 @@ def blast_radius(db: Session, tenant_id: str, origin_id: str, max_depth: int = 8
                 visited[neighbor] = depth + 1
                 queue.append(neighbor)
 
-    assets = (
-        db.query(Asset)
-        .filter(Asset.tenant_id == tenant_id, Asset.id.in_(list(visited.keys())))
-        .all()
-    )
+    assets = db.query(Asset).filter(Asset.tenant_id == tenant_id, Asset.id.in_(list(visited.keys()))).all()
     by_id = {a.id: a for a in assets}
     affected = []
     counts: dict[str, int] = defaultdict(int)

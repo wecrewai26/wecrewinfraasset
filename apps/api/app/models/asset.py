@@ -42,7 +42,9 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     discovered_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    attributes: Mapped[list["AssetAttribute"]] = relationship(back_populates="asset", cascade="all, delete-orphan")
+    attributes: Mapped[list["AssetAttribute"]] = relationship(
+        back_populates="asset", cascade="all, delete-orphan"
+    )
 
 
 class AssetAttribute(UUIDPrimaryKeyMixin, TimestampMixin, Base):

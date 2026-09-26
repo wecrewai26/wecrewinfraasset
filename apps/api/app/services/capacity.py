@@ -141,13 +141,40 @@ def advise_gpu_server_placement(
     cap = rack_capacity(db, tenant_id, rack)
 
     def add(name: str, ok: bool, detail: str, warn: bool = False) -> None:
-        checks.append({"name": name, "result": "PASS" if ok and not warn else "WARNING" if warn else "FAIL", "detail": detail})
+        checks.append(
+            {
+                "name": name,
+                "result": "PASS" if ok and not warn else "WARNING" if warn else "FAIL",
+                "detail": detail,
+            }
+        )
 
-    add("Rack space", cap["space"]["available"] >= ru_needed, f"{cap['space']['available']} RU free, need {ru_needed}")
-    add("Power", cap["power_kw"]["available"] >= power_kw, f"{cap['power_kw']['available']} kW free, need {power_kw} kW")
-    add("Cooling", cap["cooling_kw"]["available"] >= cooling_kw, f"{cap['cooling_kw']['available']} kW free, need {cooling_kw} kW")
-    add("Weight", cap["weight_kg"]["available"] >= weight_kg, f"{cap['weight_kg']['available']} kg free, need {weight_kg} kg")
-    add("Network ports", True, f"{network_ports} ports requested — ToR port inventory assumed available", warn=True)
+    add(
+        "Rack space",
+        cap["space"]["available"] >= ru_needed,
+        f"{cap['space']['available']} RU free, need {ru_needed}",
+    )
+    add(
+        "Power",
+        cap["power_kw"]["available"] >= power_kw,
+        f"{cap['power_kw']['available']} kW free, need {power_kw} kW",
+    )
+    add(
+        "Cooling",
+        cap["cooling_kw"]["available"] >= cooling_kw,
+        f"{cap['cooling_kw']['available']} kW free, need {cooling_kw} kW",
+    )
+    add(
+        "Weight",
+        cap["weight_kg"]["available"] >= weight_kg,
+        f"{cap['weight_kg']['available']} kg free, need {weight_kg} kg",
+    )
+    add(
+        "Network ports",
+        True,
+        f"{network_ports} ports requested — ToR port inventory assumed available",
+        warn=True,
+    )
     add("GPU count", True, f"{gpu_count} GPUs requested for this chassis")
 
     fails = [c for c in checks if c["result"] == "FAIL"]
@@ -166,7 +193,9 @@ def advise_gpu_server_placement(
         },
         "checks": checks,
         "capacity": cap,
-        "alternatives": _alternatives(db, tenant_id, ru_needed, power_kw, cooling_kw, weight_kg, exclude=rack.id),
+        "alternatives": _alternatives(
+            db, tenant_id, ru_needed, power_kw, cooling_kw, weight_kg, exclude=rack.id
+        ),
     }
 
 

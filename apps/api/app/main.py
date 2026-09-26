@@ -6,11 +6,11 @@ from fastapi.responses import PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, generate_latest
 from sqlalchemy.orm import Session
 
+import app.models  # noqa: F401
 from app.api.v1 import api_router
 from app.core.base import Base
 from app.core.config import get_settings
 from app.core.db import SessionLocal, engine
-import app.models  # noqa: F401
 from app.seed.seed import seed_if_empty
 
 settings = get_settings()
@@ -96,7 +96,11 @@ def _refresh_gauges(db: Session) -> None:
     from app.models.datacenter import Rack
     from app.models.telemetry import TelemetrySample
 
-    rows = db.query(Asset.asset_type, Asset.health, func.count(Asset.id)).group_by(Asset.asset_type, Asset.health).all()
+    rows = (
+        db.query(Asset.asset_type, Asset.health, func.count(Asset.id))
+        .group_by(Asset.asset_type, Asset.health)
+        .all()
+    )
     for asset_type, health, count in rows:
         ASSET_HEALTH.labels(asset_type=asset_type).set(count if health == "healthy" else 0)
     power = 0.0
@@ -114,7 +118,9 @@ def _refresh_gauges(db: Session) -> None:
     THERMAL_HEAD.set(max(cooling_cap - cooling, 0))
     samples = (
         db.query(TelemetrySample)
-        .filter(TelemetrySample.metric.in_(["infraasset_gpu_temperature_c", "infraasset_gpu_utilization_percent"]))
+        .filter(
+            TelemetrySample.metric.in_(["infraasset_gpu_temperature_c", "infraasset_gpu_utilization_percent"])
+        )
         .all()
     )
     for sample in samples:

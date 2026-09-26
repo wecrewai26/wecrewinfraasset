@@ -106,7 +106,9 @@ def get_asset(
     peer_ids = {r.target_id if r.source_id == asset.id else r.source_id for r in rels}
     peers = {
         a.id: a
-        for a in db.query(Asset).filter(Asset.tenant_id == principal.tenant_id, Asset.id.in_(peer_ids or ["-"])).all()
+        for a in db.query(Asset)
+        .filter(Asset.tenant_id == principal.tenant_id, Asset.id.in_(peer_ids or ["-"]))
+        .all()
     }
     alerts = (
         db.query(Alert)
